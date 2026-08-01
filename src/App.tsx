@@ -159,6 +159,7 @@ const samplePlan: HousePlan = {
 
 const wallHeight = 2.4
 const wallThickness = 0.12
+const doorwayWidthMeters = 0.9
 const fallbackBuildingWidthMeters = 13.2
 
 function isPoint(value: unknown): value is Point {
@@ -294,6 +295,7 @@ function getSpaceWalls(spaces: Space[]) {
     id: `space-wall-${index}`,
     start: edge.start,
     end: edge.end,
+    hasOpening: edge.count > 1,
   }))
 }
 
@@ -320,7 +322,7 @@ function SpaceMesh({
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
       <shapeGeometry args={[shape]} />
-      <meshStandardMaterial color={space.color} roughness={0.86} />
+      <meshStandardMaterial color={space.color} roughness={0.72} />
     </mesh>
   )
 }
@@ -330,20 +332,43 @@ function WallMesh({
   scale,
   center,
 }: {
-  wall: Wall
+  wall: Wall & { hasOpening?: boolean }
   scale: number
   center: THREE.Vector2
 }) {
   const start = toScenePoint(wall.start, scale, center)
   const end = toScenePoint(wall.end, scale, center)
-  const midpoint = start.clone().add(end).multiplyScalar(0.5)
   const length = start.distanceTo(end)
   const angle = Math.atan2(end.z - start.z, end.x - start.x)
+
+  if (wall.hasOpening && length > doorwayWidthMeters * 1.8) {
+    const segmentLength = (length - doorwayWidthMeters) / 2
+    const direction = end.clone().sub(start).normalize()
+    const firstMidpoint = start.clone().add(direction.clone().multiplyScalar(segmentLength / 2))
+    const secondMidpoint = end.clone().add(direction.clone().multiplyScalar(-segmentLength / 2))
+
+    return (
+      <>
+        {[firstMidpoint, secondMidpoint].map((midpoint, index) => (
+          <mesh
+            key={`${wall.id}-${index}`}
+            position={[midpoint.x, wallHeight / 2, midpoint.z]}
+            rotation={[0, -angle, 0]}
+          >
+            <boxGeometry args={[segmentLength, wallHeight, wallThickness]} />
+            <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
+          </mesh>
+        ))}
+      </>
+    )
+  }
+
+  const midpoint = start.clone().add(end).multiplyScalar(0.5)
 
   return (
     <mesh position={[midpoint.x, wallHeight / 2, midpoint.z]} rotation={[0, -angle, 0]}>
       <boxGeometry args={[length, wallHeight, wallThickness]} />
-      <meshStandardMaterial color="#35302a" roughness={0.72} />
+      <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
     </mesh>
   )
 }
@@ -361,11 +386,61 @@ function FixtureMesh({
   const width = fixture.size[0] / scale
   const depth = fixture.size[1] / scale
   const height = fixture.kind === 'bath' ? 0.58 : fixture.kind === 'kitchen' ? 0.88 : 0.42
+  const rotation = THREE.MathUtils.degToRad(fixture.rotation)
+
+  if (fixture.kind === 'kitchen') {
+    return (
+      <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
+        <mesh position={[0, 0.43, 0]}>
+          <boxGeometry args={[width, 0.86, depth]} />
+          <meshStandardMaterial color="#d8d2c6" roughness={0.62} />
+        </mesh>
+        <mesh position={[width * 0.18, 0.9, 0]}>
+          <boxGeometry args={[width * 0.18, 0.04, depth * 0.55]} />
+          <meshStandardMaterial color="#8fb0b6" roughness={0.3} metalness={0.2} />
+        </mesh>
+        <mesh position={[-width * 0.2, 0.91, 0]}>
+          <boxGeometry args={[width * 0.22, 0.03, depth * 0.55]} />
+          <meshStandardMaterial color="#303330" roughness={0.5} />
+        </mesh>
+      </group>
+    )
+  }
+
+  if (fixture.kind === 'bath' || fixture.kind === 'bathtub') {
+    return (
+      <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
+        <mesh position={[0, 0.22, 0]}>
+          <boxGeometry args={[width, 0.44, depth]} />
+          <meshStandardMaterial color="#dcecef" roughness={0.45} />
+        </mesh>
+        <mesh position={[0, 0.48, 0]}>
+          <boxGeometry args={[width * 0.72, 0.12, depth * 0.62]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.38} />
+        </mesh>
+      </group>
+    )
+  }
+
+  if (fixture.kind === 'toilet') {
+    return (
+      <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
+        <mesh position={[0, 0.2, depth * 0.12]}>
+          <boxGeometry args={[width * 0.62, 0.4, depth * 0.64]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.34} />
+        </mesh>
+        <mesh position={[0, 0.36, -depth * 0.26]}>
+          <boxGeometry args={[width * 0.7, 0.72, depth * 0.18]} />
+          <meshStandardMaterial color="#f4f4f1" roughness={0.4} />
+        </mesh>
+      </group>
+    )
+  }
 
   return (
     <mesh
       position={[position.x, height / 2 + 0.02, position.z]}
-      rotation={[0, THREE.MathUtils.degToRad(fixture.rotation), 0]}
+      rotation={[0, rotation, 0]}
     >
       <boxGeometry args={[width, height, depth]} />
       <meshStandardMaterial color={fixture.color} roughness={0.64} />
@@ -381,7 +456,8 @@ function PlanScene({ plan }: { plan: HousePlan }) {
   return (
     <>
       <ambientLight intensity={1.2} />
-      <directionalLight position={[4, 8, 6]} intensity={1.8} />
+      <hemisphereLight args={['#ffffff', '#c7bca8', 1.2]} />
+      <directionalLight position={[4, 8, 6]} intensity={1.4} />
       <group>
         {plan.spaces.map((space) => (
           <SpaceMesh key={space.id} space={space} scale={renderScale} center={center} />
@@ -393,8 +469,8 @@ function PlanScene({ plan }: { plan: HousePlan }) {
           <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
         ))}
       </group>
-      <gridHelper args={[16, 16, '#b9c0c6', '#e1e5e8']} position={[0, 0, 0]} />
-      <OrbitControls makeDefault target={[0, 0.7, 0]} />
+      <gridHelper args={[16, 16, '#c5ccc5', '#edf0ea']} position={[0, -0.01, 0]} />
+      <OrbitControls makeDefault target={[0, 1.1, 0]} maxPolarAngle={Math.PI * 0.48} />
     </>
   )
 }
@@ -566,7 +642,7 @@ function App() {
       </aside>
 
       <section className="viewer" aria-label="3D plan preview">
-        <Canvas camera={{ position: [6, 7, 8], fov: 45 }}>
+        <Canvas camera={{ position: [5.5, 3.2, 7], fov: 52 }}>
           <PlanScene plan={activePlan} />
         </Canvas>
       </section>
