@@ -1,4 +1,5 @@
 const geminiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models'
+const geminiModel = 'gemini-3.6-flash'
 
 const planPrompt = `
 この住宅の間取り画像を解析し、3Dプレビュー用のJSONだけを返してください。
@@ -58,13 +59,6 @@ type GeminiResponse = {
   }
 }
 
-function getGeminiConfig() {
-  return {
-    apiKey: import.meta.env.VITE_GEMINI_API_KEY as string | undefined,
-    model: (import.meta.env.VITE_GEMINI_MODEL as string | undefined) ?? 'gemini-3.6-flash',
-  }
-}
-
 function stripDataUrlPrefix(dataUrl: string) {
   const [, base64 = dataUrl] = dataUrl.split(',')
   return base64
@@ -93,14 +87,14 @@ export function fileToDataUrl(file: File) {
 }
 
 export async function generatePlanFromImage(file: File) {
-  const { apiKey, model } = getGeminiConfig()
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
 
   if (!apiKey) {
     throw new Error('.envにVITE_GEMINI_API_KEYを設定してください。')
   }
 
   const dataUrl = await fileToDataUrl(file)
-  const response = await fetch(`${geminiEndpoint}/${model}:generateContent`, {
+  const response = await fetch(`${geminiEndpoint}/${geminiModel}:generateContent`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
