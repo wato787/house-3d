@@ -51,26 +51,73 @@ h1 {
   background: #ffffff;
 }
 
-h2 {
-  margin: 0;
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   border-bottom: 1px solid #e4e9e2;
   padding: 12px 14px;
+}
+
+h2 {
+  margin: 0;
   color: #30362f;
   font-size: 14px;
   line-height: 1.25;
   letter-spacing: 0;
 }
 
-pre {
+.status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.status-ok {
+  color: #245c34;
+  background: #dcefe1;
+}
+
+.status-error {
+  color: #8a321f;
+  background: #f7ded5;
+}
+
+textarea {
   flex: 1;
+  width: 100%;
+  min-height: 0;
   margin: 0;
+  border: 0;
+  outline: 0;
   overflow: auto;
+  resize: none;
   padding: 14px;
+  background: #ffffff;
   color: #293028;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 12px;
   line-height: 1.5;
   text-align: left;
   white-space: pre;
+}
+
+textarea:focus {
+  box-shadow: inset 0 0 0 2px #97ad9e;
+}
+
+.error-message {
+  margin: 0;
+  border-top: 1px solid #f0c9bd;
+  padding: 10px 14px;
+  color: #8a321f;
+  background: #fff6f2;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .viewer {

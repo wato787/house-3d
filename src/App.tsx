@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -34,7 +35,7 @@ type HousePlan = {
   fixtures: Fixture[]
 }
 
-const plan: HousePlan = {
+const samplePlan: HousePlan = {
   scale: 1000,
   spaces: [
     {
@@ -154,18 +155,90 @@ const plan: HousePlan = {
   ],
 }
 
-const center = new THREE.Vector2(6600, 3250)
 const wallHeight = 2.4
 const wallThickness = 0.12
 
-function toScenePoint([x, y]: Point) {
-  return new THREE.Vector3((x - center.x) / plan.scale, 0, (y - center.y) / plan.scale)
+function isPoint(value: unknown): value is Point {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((coordinate) => typeof coordinate === 'number')
+  )
 }
 
-function SpaceMesh({ space }: { space: Space }) {
+function isPlan(value: unknown): value is HousePlan {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as HousePlan
+  return (
+    typeof candidate.scale === 'number' &&
+    candidate.scale > 0 &&
+    Array.isArray(candidate.spaces) &&
+    Array.isArray(candidate.walls) &&
+    Array.isArray(candidate.fixtures) &&
+    candidate.spaces.every(
+      (space) =>
+        typeof space.id === 'string' &&
+        typeof space.name === 'string' &&
+        typeof space.color === 'string' &&
+        Array.isArray(space.polygon) &&
+        space.polygon.length >= 3 &&
+        space.polygon.every(isPoint),
+    ) &&
+    candidate.walls.every(
+      (wall) => typeof wall.id === 'string' && isPoint(wall.start) && isPoint(wall.end),
+    ) &&
+    candidate.fixtures.every(
+      (fixture) =>
+        typeof fixture.id === 'string' &&
+        typeof fixture.kind === 'string' &&
+        typeof fixture.color === 'string' &&
+        isPoint(fixture.position) &&
+        Array.isArray(fixture.size) &&
+        fixture.size.length === 2 &&
+        fixture.size.every((value) => typeof value === 'number') &&
+        typeof fixture.rotation === 'number',
+    )
+  )
+}
+
+function getPlanCenter(plan: HousePlan) {
+  const points = [
+    ...plan.spaces.flatMap((space) => space.polygon),
+    ...plan.walls.flatMap((wall) => [wall.start, wall.end]),
+    ...plan.fixtures.map((fixture) => fixture.position),
+  ]
+
+  if (points.length === 0) {
+    return new THREE.Vector2(0, 0)
+  }
+
+  const xs = points.map(([x]) => x)
+  const ys = points.map(([, y]) => y)
+  return new THREE.Vector2(
+    (Math.min(...xs) + Math.max(...xs)) / 2,
+    (Math.min(...ys) + Math.max(...ys)) / 2,
+  )
+}
+
+function toScenePoint([x, y]: Point, scale: number, center: THREE.Vector2) {
+  return new THREE.Vector3((x - center.x) / scale, 0, (y - center.y) / scale)
+}
+
+function SpaceMesh({
+  space,
+  scale,
+  center,
+}: {
+  space: Space
+  scale: number
+  center: THREE.Vector2
+}) {
   const shape = new THREE.Shape()
   space.polygon.forEach((point, index) => {
-    const scenePoint = toScenePoint(point)
+    const scenePoint = toScenePoint(point, scale, center)
     if (index === 0) {
       shape.moveTo(scenePoint.x, -scenePoint.z)
     } else {
@@ -182,9 +255,17 @@ function SpaceMesh({ space }: { space: Space }) {
   )
 }
 
-function WallMesh({ wall }: { wall: Wall }) {
-  const start = toScenePoint(wall.start)
-  const end = toScenePoint(wall.end)
+function WallMesh({
+  wall,
+  scale,
+  center,
+}: {
+  wall: Wall
+  scale: number
+  center: THREE.Vector2
+}) {
+  const start = toScenePoint(wall.start, scale, center)
+  const end = toScenePoint(wall.end, scale, center)
   const midpoint = start.clone().add(end).multiplyScalar(0.5)
   const length = start.distanceTo(end)
   const angle = Math.atan2(end.z - start.z, end.x - start.x)
@@ -197,10 +278,18 @@ function WallMesh({ wall }: { wall: Wall }) {
   )
 }
 
-function FixtureMesh({ fixture }: { fixture: Fixture }) {
-  const position = toScenePoint(fixture.position)
-  const width = fixture.size[0] / plan.scale
-  const depth = fixture.size[1] / plan.scale
+function FixtureMesh({
+  fixture,
+  scale,
+  center,
+}: {
+  fixture: Fixture
+  scale: number
+  center: THREE.Vector2
+}) {
+  const position = toScenePoint(fixture.position, scale, center)
+  const width = fixture.size[0] / scale
+  const depth = fixture.size[1] / scale
   const height = fixture.kind === 'bath' ? 0.58 : fixture.kind === 'kitchen' ? 0.88 : 0.42
 
   return (
@@ -214,20 +303,22 @@ function FixtureMesh({ fixture }: { fixture: Fixture }) {
   )
 }
 
-function PlanScene() {
+function PlanScene({ plan }: { plan: HousePlan }) {
+  const center = useMemo(() => getPlanCenter(plan), [plan])
+
   return (
     <>
       <ambientLight intensity={1.2} />
       <directionalLight position={[4, 8, 6]} intensity={1.8} />
       <group>
         {plan.spaces.map((space) => (
-          <SpaceMesh key={space.id} space={space} />
+          <SpaceMesh key={space.id} space={space} scale={plan.scale} center={center} />
         ))}
         {plan.walls.map((wall) => (
-          <WallMesh key={wall.id} wall={wall} />
+          <WallMesh key={wall.id} wall={wall} scale={plan.scale} center={center} />
         ))}
         {plan.fixtures.map((fixture) => (
-          <FixtureMesh key={fixture.id} fixture={fixture} />
+          <FixtureMesh key={fixture.id} fixture={fixture} scale={plan.scale} center={center} />
         ))}
       </group>
       <gridHelper args={[16, 16, '#b9c0c6', '#e1e5e8']} position={[0, 0, 0]} />
@@ -237,6 +328,27 @@ function PlanScene() {
 }
 
 function App() {
+  const [jsonText, setJsonText] = useState(() => JSON.stringify(samplePlan, null, 2))
+
+  const parsed = useMemo(() => {
+    try {
+      const parsedJson: unknown = JSON.parse(jsonText)
+      if (!isPlan(parsedJson)) {
+        return {
+          error:
+            'JSON shape is invalid. Required: scale, spaces, walls, fixtures with numeric coordinates.',
+          plan: null,
+        }
+      }
+
+      return { error: null, plan: parsedJson }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Invalid JSON', plan: null }
+    }
+  }, [jsonText])
+
+  const activePlan = parsed.plan ?? samplePlan
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -247,14 +359,25 @@ function App() {
         </div>
 
         <section className="panel">
-          <h2>Sample JSON</h2>
-          <pre>{JSON.stringify(plan, null, 2)}</pre>
+          <div className="panel-header">
+            <h2>Plan JSON</h2>
+            <span className={parsed.error ? 'status status-error' : 'status status-ok'}>
+              {parsed.error ? 'Invalid' : 'Live'}
+            </span>
+          </div>
+          <textarea
+            aria-label="Plan JSON"
+            spellCheck={false}
+            value={jsonText}
+            onChange={(event) => setJsonText(event.target.value)}
+          />
+          {parsed.error ? <p className="error-message">{parsed.error}</p> : null}
         </section>
       </aside>
 
       <section className="viewer" aria-label="3D plan preview">
         <Canvas camera={{ position: [6, 7, 8], fov: 45 }}>
-          <PlanScene />
+          <PlanScene plan={activePlan} />
         </Canvas>
       </section>
     </main>
