@@ -216,6 +216,9 @@ const wallHeight = 1.2
 const wallThickness = 0.12
 const fallbackBuildingWidthMeters = 13.2
 const openingSnapDistanceMeters = 0.55
+const minimumWallSegmentMeters = 0.42
+const minimumOpeningCornerMarginMeters = 0.38
+const fixtureWallMarginMeters = 0.22
 const subtleTextureSize = 256
 
 function isPoint(value: unknown): value is Point {
@@ -309,6 +312,51 @@ function getPolygonCenter(polygon: Point[]): Point {
   return [total[0] / polygon.length, total[1] / polygon.length]
 }
 
+function getPolygonBounds(polygon: Point[]) {
+  const xs = polygon.map(([x]) => x)
+  const ys = polygon.map(([, y]) => y)
+
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  }
+}
+
+function distanceBetweenPoints(start: Point, end: Point) {
+  return Math.hypot(end[0] - start[0], end[1] - start[1])
+}
+
+function simplifyPolygon(polygon: Point[], scale: number) {
+  const minimumEdgeLength = minimumWallSegmentMeters * scale
+  let simplified = polygon
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    if (simplified.length <= 4) {
+      break
+    }
+
+    simplified = simplified.filter((point, index) => {
+      const previous = simplified[(index - 1 + simplified.length) % simplified.length]
+      const next = simplified[(index + 1) % simplified.length]
+      const previousDistance = distanceBetweenPoints(previous, point)
+      const nextDistance = distanceBetweenPoints(point, next)
+
+      return previousDistance >= minimumEdgeLength || nextDistance >= minimumEdgeLength
+    })
+  }
+
+  return simplified.length >= 3 ? simplified : polygon
+}
+
+function normalizeSpaces(spaces: Space[], scale: number) {
+  return spaces.map((space) => ({
+    ...space,
+    polygon: simplifyPolygon(space.polygon, scale),
+  }))
+}
+
 function doesOutdoorAreaOverlapSpaces(area: OutdoorArea, spaces: Space[]) {
   return spaces.some((space) => {
     const center = getPolygonCenter(area.polygon)
@@ -345,6 +393,26 @@ function isFixtureAllowedInPlan(fixture: Fixture, spaces: Space[]) {
     .some((space) => isPointInPolygon(fixture.position, space.polygon))
 }
 
+function clampFixtureToRoom(fixture: Fixture, spaces: Space[], scale: number): Fixture {
+  const room = spaces.find((space) => isPointInPolygon(fixture.position, space.polygon))
+
+  if (!room) {
+    return fixture
+  }
+
+  const bounds = getPolygonBounds(room.polygon)
+  const margin = fixtureWallMarginMeters * scale
+  const clampedPosition: Point = [
+    THREE.MathUtils.clamp(fixture.position[0], bounds.minX + margin, bounds.maxX - margin),
+    THREE.MathUtils.clamp(fixture.position[1], bounds.minY + margin, bounds.maxY - margin),
+  ]
+
+  return {
+    ...fixture,
+    position: isPointInPolygon(clampedPosition, room.polygon) ? clampedPosition : fixture.position,
+  }
+}
+
 function normalizeOpenings(plan: HousePlan) {
   const walls = getSpaceWalls(plan.spaces)
   const scale = getRenderScale(plan)
@@ -367,6 +435,14 @@ function normalizeOpenings(plan: HousePlan) {
       .filter((match): match is { opening: Opening; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
         Boolean(match.projection),
       )
+      .filter(({ projection }) => {
+        const wallLength = distanceBetweenPoints(wall.start, wall.end) / scale
+        const halfWidth = projection.width / 2
+        return (
+          projection.center - halfWidth >= minimumOpeningCornerMarginMeters &&
+          wallLength - (projection.center + halfWidth) >= minimumOpeningCornerMarginMeters
+        )
+      })
       .sort((a, b) => a.projection.center - b.projection.center)
       .forEach(({ opening, projection }) => {
         const hasNearbyOpening = accepted.some((acceptedOpening) => {
@@ -388,16 +464,21 @@ function normalizeOpenings(plan: HousePlan) {
 }
 
 function normalizePlan(plan: HousePlan): HousePlan {
-  const spaces = plan.spaces
+  const initialScale = getRenderScale(plan)
+  const spaces = normalizeSpaces(plan.spaces, initialScale)
+  const normalizedBasePlan = { ...plan, spaces }
 
   return {
     ...plan,
+    spaces,
     outdoorAreas: (plan.outdoorAreas ?? []).filter(
       (area) => !doesOutdoorAreaOverlapSpaces(area, spaces),
     ),
     walls: plan.walls ?? [],
-    openings: normalizeOpenings(plan),
-    fixtures: (plan.fixtures ?? []).filter((fixture) => isFixtureAllowedInPlan(fixture, spaces)),
+    openings: normalizeOpenings(normalizedBasePlan),
+    fixtures: (plan.fixtures ?? [])
+      .filter((fixture) => isFixtureAllowedInPlan(fixture, spaces))
+      .map((fixture) => clampFixtureToRoom(fixture, spaces, initialScale)),
   }
 }
 
@@ -571,7 +652,7 @@ function getWallSegments(wall: Wall & { hasOpening?: boolean }, openings: Openin
     segments.push({ start: cursor, end: wallLength })
   }
 
-  return segments.filter((segment) => segment.end - segment.start > 0.08)
+  return segments.filter((segment) => segment.end - segment.start > minimumWallSegmentMeters)
 }
 
 function getOpeningsByWall(
