@@ -589,10 +589,12 @@ function SpaceMesh({
   space,
   scale,
   center,
+  index,
 }: {
   space: Space
   scale: number
   center: THREE.Vector2
+  index: number
 }) {
   const texture = useMemo(() => createPatternTexture(getFloorKind(space)), [space])
   const shape = new THREE.Shape()
@@ -607,9 +609,16 @@ function SpaceMesh({
   shape.closePath()
 
   return (
-    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03 + index * 0.004, 0]}>
       <shapeGeometry args={[shape]} />
-      <meshStandardMaterial color="#ffffff" map={texture ?? undefined} roughness={0.78} />
+      <meshStandardMaterial
+        color="#ffffff"
+        map={texture ?? undefined}
+        polygonOffset
+        polygonOffsetFactor={-1 - index}
+        polygonOffsetUnits={-1 - index}
+        roughness={0.78}
+      />
     </mesh>
   )
 }
@@ -816,8 +825,14 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
         {(plan.outdoorAreas ?? []).map((area) => (
           <OutdoorAreaMesh key={area.id} area={area} scale={renderScale} center={center} />
         ))}
-        {plan.spaces.map((space) => (
-          <SpaceMesh key={space.id} space={space} scale={renderScale} center={center} />
+        {plan.spaces.map((space, index) => (
+          <SpaceMesh
+            key={space.id}
+            space={space}
+            scale={renderScale}
+            center={center}
+            index={index}
+          />
         ))}
         {generatedWalls.map((wall) => (
           <WallMesh
