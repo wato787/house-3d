@@ -15,6 +15,12 @@ type Space = {
   color: string
 }
 
+type OutdoorArea = {
+  id: string
+  kind: 'garden' | 'parking' | 'terrace' | 'path'
+  polygon: Point[]
+}
+
 type Wall = {
   id: string
   start: Point
@@ -40,6 +46,7 @@ type Fixture = {
 type HousePlan = {
   scale: number
   spaces: Space[]
+  outdoorAreas?: OutdoorArea[]
   walls?: Wall[]
   openings?: Opening[]
   fixtures?: Fixture[]
@@ -111,6 +118,28 @@ const samplePlan: HousePlan = {
         [8700, 6500],
       ],
       color: '#e5e1d7',
+    },
+  ],
+  outdoorAreas: [
+    {
+      id: 'south-garden',
+      kind: 'garden',
+      polygon: [
+        [-400, 6500],
+        [5200, 6500],
+        [5200, 9500],
+        [-400, 9500],
+      ],
+    },
+    {
+      id: 'east-parking',
+      kind: 'parking',
+      polygon: [
+        [13200, 600],
+        [16600, 600],
+        [16600, 5200],
+        [13200, 5200],
+      ],
     },
   ],
   walls: [
@@ -201,6 +230,7 @@ function isPlan(value: unknown): value is HousePlan {
     typeof candidate.scale === 'number' &&
     candidate.scale > 0 &&
     Array.isArray(candidate.spaces) &&
+    (candidate.outdoorAreas === undefined || Array.isArray(candidate.outdoorAreas)) &&
     (candidate.walls === undefined || Array.isArray(candidate.walls)) &&
     (candidate.openings === undefined || Array.isArray(candidate.openings)) &&
     (candidate.fixtures === undefined || Array.isArray(candidate.fixtures)) &&
@@ -212,6 +242,17 @@ function isPlan(value: unknown): value is HousePlan {
         Array.isArray(space.polygon) &&
         space.polygon.length >= 3 &&
         space.polygon.every(isPoint),
+    ) &&
+    (candidate.outdoorAreas ?? []).every(
+      (area) =>
+        typeof area.id === 'string' &&
+        (area.kind === 'garden' ||
+          area.kind === 'parking' ||
+          area.kind === 'terrace' ||
+          area.kind === 'path') &&
+        Array.isArray(area.polygon) &&
+        area.polygon.length >= 3 &&
+        area.polygon.every(isPoint),
     ) &&
     (candidate.walls ?? []).every(
       (wall) => typeof wall.id === 'string' && isPoint(wall.start) && isPoint(wall.end),
@@ -240,6 +281,7 @@ function isPlan(value: unknown): value is HousePlan {
 function normalizePlan(plan: HousePlan): HousePlan {
   return {
     ...plan,
+    outdoorAreas: plan.outdoorAreas ?? [],
     walls: plan.walls ?? [],
     openings: plan.openings ?? [],
     fixtures: plan.fixtures ?? [],
@@ -247,7 +289,10 @@ function normalizePlan(plan: HousePlan): HousePlan {
 }
 
 function getStructuralPoints(plan: HousePlan) {
-  return plan.spaces.flatMap((space) => space.polygon)
+  return [
+    ...plan.spaces.flatMap((space) => space.polygon),
+    ...(plan.outdoorAreas ?? []).flatMap((area) => area.polygon),
+  ]
 }
 
 function getPlanBounds(plan: HousePlan) {
@@ -424,7 +469,7 @@ function getWallSegments(wall: Wall & { hasOpening?: boolean }, openings: Openin
   return segments.filter((segment) => segment.end - segment.start > 0.08)
 }
 
-function createPatternTexture(kind: 'wood' | 'tile' | 'concrete') {
+function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass') {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 256
@@ -471,6 +516,14 @@ function createPatternTexture(kind: 'wood' | 'tile' | 'concrete') {
       context.lineTo(canvas.width, y)
       context.stroke()
     }
+  } else if (kind === 'grass') {
+    context.fillStyle = '#74a85b'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    for (let i = 0; i < 900; i += 1) {
+      const alpha = Math.random() * 0.18
+      context.fillStyle = Math.random() > 0.5 ? `rgba(35, 91, 38, ${alpha})` : `rgba(175, 214, 121, ${alpha})`
+      context.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 2, 2)
+    }
   } else {
     context.fillStyle = '#cfd4cf'
     context.fillRect(0, 0, canvas.width, canvas.height)
@@ -484,7 +537,7 @@ function createPatternTexture(kind: 'wood' | 'tile' | 'concrete') {
   const texture = new THREE.CanvasTexture(canvas)
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(kind === 'wood' ? 2.8 : 2, kind === 'wood' ? 2.8 : 2)
+  texture.repeat.set(kind === 'wood' ? 2.8 : kind === 'grass' ? 3.8 : 2, kind === 'wood' ? 2.8 : kind === 'grass' ? 3.8 : 2)
   texture.colorSpace = THREE.SRGBColorSpace
   return texture
 }
@@ -497,6 +550,45 @@ function getFloorKind(space: Space) {
     return 'tile'
   }
   return 'wood'
+}
+
+function getOutdoorTextureKind(kind: OutdoorArea['kind']) {
+  if (kind === 'garden') {
+    return 'grass'
+  }
+  if (kind === 'terrace') {
+    return 'tile'
+  }
+  return 'concrete'
+}
+
+function OutdoorAreaMesh({
+  area,
+  scale,
+  center,
+}: {
+  area: OutdoorArea
+  scale: number
+  center: THREE.Vector2
+}) {
+  const texture = useMemo(() => createPatternTexture(getOutdoorTextureKind(area.kind)), [area])
+  const shape = new THREE.Shape()
+  area.polygon.forEach((point, index) => {
+    const scenePoint = toScenePoint(point, scale, center)
+    if (index === 0) {
+      shape.moveTo(scenePoint.x, -scenePoint.z)
+    } else {
+      shape.lineTo(scenePoint.x, -scenePoint.z)
+    }
+  })
+  shape.closePath()
+
+  return (
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.025, 0]}>
+      <shapeGeometry args={[shape]} />
+      <meshStandardMaterial color="#ffffff" map={texture ?? undefined} roughness={0.86} />
+    </mesh>
+  )
 }
 
 function SpaceMesh({
@@ -738,6 +830,9 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
       />
       <Environment preset="apartment" environmentIntensity={0.45} />
       <group>
+        {(plan.outdoorAreas ?? []).map((area) => (
+          <OutdoorAreaMesh key={area.id} area={area} scale={renderScale} center={center} />
+        ))}
         {plan.spaces.map((space) => (
           <SpaceMesh key={space.id} space={space} scale={renderScale} center={center} />
         ))}
