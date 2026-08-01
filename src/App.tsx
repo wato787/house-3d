@@ -330,6 +330,7 @@ function PlanScene({ plan }: { plan: HousePlan }) {
 
 function App() {
   const [jsonText, setJsonText] = useState(() => JSON.stringify(samplePlan, null, 2))
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [imagePreview, setImagePreview] = useState<{
     name: string
     url: string
@@ -390,8 +391,8 @@ function App() {
       <aside className="sidebar">
         <div>
           <p className="eyebrow">House 3D</p>
-          <h1>Plan Preview</h1>
-          <p className="lead">間取りJSONから、床・壁・設備の3D下書きを表示します。</p>
+          <h1>間取りを3Dで確認</h1>
+          <p className="lead">間取り画像を入れて、立体プレビューを作成します。</p>
         </div>
 
         <section className="image-panel">
@@ -405,8 +406,8 @@ function App() {
               <img src={imagePreview.url} alt={imagePreview.name} />
             ) : (
               <div className="dropzone-empty">
-                <strong>Drop floor plan</strong>
-                <span>PNG, JPG, JPEG, WEBP</span>
+                <strong>間取り画像を追加</strong>
+                <span>ドラッグ&ドロップ、またはクリックして選択</span>
               </div>
             )}
           </div>
@@ -414,26 +415,43 @@ function App() {
             <div className="image-meta">
               <span>{imagePreview.name}</span>
               <button type="button" onClick={() => setImagePreview(null)}>
-                Clear
+                クリア
               </button>
             </div>
           ) : null}
         </section>
 
+        <button type="button" className="primary-action" disabled={!imagePreview}>
+          3Dプレビューを作成
+        </button>
+
         <section className="panel">
-          <div className="panel-header">
-            <h2>Plan JSON</h2>
+          <button
+            type="button"
+            className="panel-header panel-toggle"
+            onClick={() => setIsDetailsOpen((isOpen) => !isOpen)}
+            aria-expanded={isDetailsOpen}
+          >
+            <h2>詳細編集</h2>
             <span className={parsed.error ? 'status status-error' : 'status status-ok'}>
-              {parsed.error ? 'Invalid' : 'Live'}
+              {parsed.error ? '要確認' : '反映中'}
             </span>
-          </div>
-          <textarea
-            aria-label="Plan JSON"
-            spellCheck={false}
-            value={jsonText}
-            onChange={(event) => setJsonText(event.target.value)}
-          />
-          {parsed.error ? <p className="error-message">{parsed.error}</p> : null}
+          </button>
+          {isDetailsOpen ? (
+            <>
+              <textarea
+                aria-label="Plan data"
+                spellCheck={false}
+                value={jsonText}
+                onChange={(event) => setJsonText(event.target.value)}
+              />
+              {parsed.error ? <p className="error-message">{parsed.error}</p> : null}
+            </>
+          ) : (
+            <p className="details-summary">
+              立体化に使う内部データを直接調整できます。通常は閉じたままで大丈夫です。
+            </p>
+          )}
         </section>
       </aside>
 

@@ -40,6 +40,28 @@ h1 {
   line-height: 1.65;
 }
 
+.primary-action {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 13px 16px;
+  color: #ffffff;
+  background: #2f6b46;
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.primary-action:hover:not(:disabled) {
+  background: #275b3b;
+}
+
+.primary-action:disabled {
+  color: #7b867d;
+  background: #dce4dc;
+  cursor: not-allowed;
+}
+
 .panel {
   display: flex;
   min-height: 0;
@@ -140,6 +162,17 @@ h1 {
   padding: 12px 14px;
 }
 
+.panel-toggle {
+  width: 100%;
+  border: 0;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.panel-toggle:hover {
+  background: #f6f9f5;
+}
+
 h2 {
   margin: 0;
   color: #30362f;
@@ -165,6 +198,14 @@ h2 {
 .status-error {
   color: #8a321f;
   background: #f7ded5;
+}
+
+.details-summary {
+  margin: 0;
+  padding: 14px;
+  color: #626b63;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 textarea {
