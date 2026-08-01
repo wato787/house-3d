@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, OrbitControls, RoundedBox } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
@@ -1108,12 +1108,14 @@ function App() {
   const [jsonText, setJsonText] = useState(() => JSON.stringify(samplePlan, null, 2))
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [hasPreview, setHasPreview] = useState(false)
   const [generationError, setGenerationError] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<{
     file: File
     name: string
     url: string
   } | null>(null)
+  const drawerRef = useRef<HTMLDialogElement | null>(null)
 
   useEffect(() => {
     return () => {
@@ -1189,6 +1191,7 @@ function App() {
 
       setJsonText(JSON.stringify(normalizePlan(parsedJson), null, 2))
       setIsDetailsOpen(false)
+      setHasPreview(true)
     } catch (error) {
       setGenerationError(
         error instanceof Error ? error.message : '3Dプレビューの作成に失敗しました。',
@@ -1198,16 +1201,38 @@ function App() {
     }
   }
 
+  function openDrawer() {
+    drawerRef.current?.showModal()
+  }
+
+  function closeDrawer() {
+    drawerRef.current?.close()
+  }
+
+  function resetPreview() {
+    setHasPreview(false)
+    setIsDetailsOpen(false)
+    setGenerationError(null)
+    setImagePreview((currentPreview) => {
+      if (currentPreview) {
+        URL.revokeObjectURL(currentPreview.url)
+      }
+
+      return null
+    })
+  }
+
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div>
+    <main className={hasPreview ? 'app-shell app-shell-preview' : 'app-shell app-shell-start'}>
+      {!hasPreview ? (
+        <section className="start-screen">
+          <div className="start-copy">
           <p className="eyebrow">House 3D</p>
           <h1>間取りを3Dで確認</h1>
           <p className="lead">間取り画像を入れて、立体プレビューを作成します。</p>
-        </div>
+          </div>
 
-        <section className="image-panel">
+          <section className="image-panel start-panel">
           <div
             {...getRootProps({
               className: `dropzone${isDragActive ? ' dropzone-active' : ''}`,
@@ -1233,11 +1258,11 @@ function App() {
                   setGenerationError(null)
                 }}
               >
-                クリア
+              クリア
               </button>
             </div>
           ) : null}
-        </section>
+          </section>
 
         <button
           type="button"
@@ -1260,38 +1285,16 @@ function App() {
           </div>
         ) : null}
         {generationError ? <p className="generation-error">{generationError}</p> : null}
-
-        <section className="panel">
-          <button
-            type="button"
-            className="panel-header panel-toggle"
-            onClick={() => setIsDetailsOpen((isOpen) => !isOpen)}
-            aria-expanded={isDetailsOpen}
-          >
-            <h2>詳細編集</h2>
-            <span className={parsed.error ? 'status status-error' : 'status status-ok'}>
-              {parsed.error ? '要確認' : '反映中'}
-            </span>
-          </button>
-          {isDetailsOpen ? (
-            <>
-              <textarea
-                aria-label="Plan data"
-                spellCheck={false}
-                value={jsonText}
-                onChange={(event) => setJsonText(event.target.value)}
-              />
-              {parsed.error ? <p className="error-message">{parsed.error}</p> : null}
-            </>
-          ) : (
-            <p className="details-summary">
-              立体化に使う内部データを直接調整できます。通常は閉じたままで大丈夫です。
-            </p>
-          )}
         </section>
-      </aside>
+      ) : null}
 
-      <section className="viewer" aria-label="3D plan preview">
+      {hasPreview ? (
+        <section className="viewer" aria-label="3D plan preview">
+          <div className="viewer-toolbar">
+            <button type="button" onClick={openDrawer}>
+              編集
+            </button>
+          </div>
         {isGenerating ? (
           <div className="viewer-loading" role="status" aria-live="polite">
             <span className="spinner" />
@@ -1312,6 +1315,102 @@ function App() {
           <PlanScene plan={activePlan} viewpoint={selectedViewpoint} />
         </Canvas>
       </section>
+      ) : null}
+
+      <dialog ref={drawerRef} className="drawer" onClick={(event) => {
+        if (event.target === drawerRef.current) {
+          closeDrawer()
+        }
+      }}>
+        <div className="drawer-panel">
+          <div className="drawer-header">
+            <div>
+              <p className="eyebrow">Controls</p>
+              <h2>編集</h2>
+            </div>
+            <button type="button" className="icon-button" onClick={closeDrawer} aria-label="閉じる">
+              ×
+            </button>
+          </div>
+
+          <section className="image-panel">
+            <div
+              {...getRootProps({
+                className: `dropzone drawer-dropzone${isDragActive ? ' dropzone-active' : ''}`,
+              })}
+            >
+              <input {...getInputProps()} />
+              {imagePreview ? (
+                <img src={imagePreview.url} alt={imagePreview.name} />
+              ) : (
+                <div className="dropzone-empty">
+                  <strong>間取り画像を追加</strong>
+                  <span>ドラッグ&ドロップ、またはクリックして選択</span>
+                </div>
+              )}
+            </div>
+            {imagePreview ? (
+              <div className="image-meta">
+                <span>{imagePreview.name}</span>
+                <button type="button" onClick={resetPreview}>
+                  最初から
+                </button>
+              </div>
+            ) : null}
+          </section>
+
+          <button
+            type="button"
+            className="primary-action"
+            disabled={!canGenerate}
+            onClick={handleCreatePreview}
+          >
+            {isGenerating ? (
+              <span className="action-loading">
+                <span className="spinner" />
+                画像を解析中
+              </span>
+            ) : (
+              '再生成'
+            )}
+          </button>
+          {isGenerating ? (
+            <div className="generation-progress">
+              <span />
+            </div>
+          ) : null}
+          {generationError ? <p className="generation-error">{generationError}</p> : null}
+
+          <section className="panel drawer-editor">
+            <button
+              type="button"
+              className="panel-header panel-toggle"
+              onClick={() => setIsDetailsOpen((isOpen) => !isOpen)}
+              aria-expanded={isDetailsOpen}
+            >
+              <h2>詳細編集</h2>
+              <span className={parsed.error ? 'status status-error' : 'status status-ok'}>
+                {parsed.error ? '要確認' : '反映中'}
+              </span>
+            </button>
+            {isDetailsOpen ? (
+              <>
+                <textarea
+                  aria-label="Plan data"
+                  spellCheck={false}
+                  value={jsonText}
+                  onChange={(event) => setJsonText(event.target.value)}
+                />
+                {parsed.error ? <p className="error-message">{parsed.error}</p> : null}
+              </>
+            ) : (
+              <p className="details-summary">
+                生成後の内部データを直接調整できます。
+              </p>
+            )}
+          </section>
+        </div>
+      </dialog>
     </main>
   )
 }

@@ -1,19 +1,30 @@
 .app-shell {
-  display: grid;
-  grid-template-columns: 420px 1fr;
+  display: block;
   min-height: 100svh;
   background: #f5f7f4;
   color: #20231f;
 }
 
-.sidebar {
+.app-shell-start {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
-  border-right: 1px solid #d8ded7;
-  background: #fbfcfa;
+  align-items: center;
+  justify-content: center;
   padding: 28px;
+}
+
+.app-shell-preview {
   overflow: hidden;
+}
+
+.start-screen {
+  display: flex;
+  width: min(560px, 100%);
+  flex-direction: column;
+  gap: 22px;
+}
+
+.start-copy {
+  text-align: center;
 }
 
 .eyebrow {
@@ -123,10 +134,14 @@ h1 {
   gap: 8px;
 }
 
+.start-panel {
+  width: 100%;
+}
+
 .dropzone {
   display: grid;
   min-height: 210px;
-  max-height: 320px;
+  max-height: 360px;
   place-items: center;
   overflow: hidden;
   border: 1px dashed #a9b7ab;
@@ -136,6 +151,10 @@ h1 {
   transition:
     background 160ms ease,
     border-color 160ms ease;
+}
+
+.start-panel .dropzone {
+  min-height: min(46svh, 360px);
 }
 
 .dropzone:hover,
@@ -291,6 +310,34 @@ textarea:focus {
   background: #e9eee8;
 }
 
+.viewer-toolbar {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 8px;
+}
+
+.viewer-toolbar button,
+.icon-button {
+  border: 1px solid rgba(64, 78, 67, 0.16);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: #26312a;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 24px rgba(30, 38, 32, 0.12);
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.1;
+  backdrop-filter: blur(10px);
+}
+
+.viewer-toolbar button:hover,
+.icon-button:hover {
+  background: #ffffff;
+}
+
 .viewer-loading {
   position: absolute;
   z-index: 2;
@@ -326,6 +373,54 @@ canvas {
   display: block;
 }
 
+.drawer {
+  width: min(420px, 100svw);
+  max-width: none;
+  height: 100svh;
+  max-height: none;
+  margin: 0 0 0 auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.drawer::backdrop {
+  background: rgba(25, 31, 27, 0.24);
+}
+
+.drawer-panel {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+  border-left: 1px solid #d8ded7;
+  padding: 22px;
+  background: #fbfcfa;
+  box-shadow: -22px 0 48px rgba(25, 31, 27, 0.18);
+}
+
+.drawer-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drawer-header .eyebrow {
+  margin-bottom: 4px;
+}
+
+.drawer-dropzone {
+  min-height: 160px;
+  max-height: 220px;
+}
+
+.drawer-editor {
+  min-height: 180px;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -347,22 +442,24 @@ canvas {
 }
 
 @media (max-width: 900px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 70svh;
+  .app-shell-start {
+    padding: 18px;
   }
 
-  .sidebar {
-    border-right: 0;
-    border-bottom: 1px solid #d8ded7;
-    padding: 20px;
+  .start-copy {
+    text-align: left;
   }
 
-  .panel {
-    max-height: 280px;
+  h1 {
+    font-size: 28px;
   }
 
-  .viewer {
-    min-height: 70svh;
+  .drawer {
+    width: 100svw;
+  }
+
+  .drawer-panel {
+    border-left: 0;
+    padding: 18px;
   }
 }
