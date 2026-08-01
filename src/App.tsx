@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { ContactShadows, Environment, OrbitControls, SoftShadows } from '@react-three/drei'
+import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
 import { generatePlanFromImage } from './gemini'
@@ -722,7 +722,6 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
   return (
     <>
       <color attach="background" args={['#eef2ec']} />
-      <SoftShadows size={14} samples={8} focus={0.85} />
       <ambientLight intensity={0.45} />
       <hemisphereLight args={['#ffffff', '#c7bca8', 0.85]} />
       <directionalLight
