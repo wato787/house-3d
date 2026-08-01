@@ -159,6 +159,7 @@ const samplePlan: HousePlan = {
 
 const wallHeight = 2.4
 const wallThickness = 0.12
+const fallbackBuildingWidthMeters = 13.2
 
 function isPoint(value: unknown): value is Point {
   return (
@@ -206,23 +207,53 @@ function isPlan(value: unknown): value is HousePlan {
   )
 }
 
-function getPlanCenter(plan: HousePlan) {
-  const points = [
-    ...plan.spaces.flatMap((space) => space.polygon),
-    ...plan.walls.flatMap((wall) => [wall.start, wall.end]),
-    ...plan.fixtures.map((fixture) => fixture.position),
-  ]
+function getStructuralPoints(plan: HousePlan) {
+  return [...plan.spaces.flatMap((space) => space.polygon), ...plan.walls.flatMap((wall) => [wall.start, wall.end])]
+}
 
+function getPlanBounds(plan: HousePlan) {
+  const points = getStructuralPoints(plan)
   if (points.length === 0) {
-    return new THREE.Vector2(0, 0)
+    return null
   }
 
   const xs = points.map(([x]) => x)
   const ys = points.map(([, y]) => y)
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  }
+}
+
+function getPlanCenter(plan: HousePlan) {
+  const bounds = getPlanBounds(plan)
+  if (!bounds) {
+    return new THREE.Vector2(0, 0)
+  }
+
   return new THREE.Vector2(
-    (Math.min(...xs) + Math.max(...xs)) / 2,
-    (Math.min(...ys) + Math.max(...ys)) / 2,
+    (bounds.minX + bounds.maxX) / 2,
+    (bounds.minY + bounds.maxY) / 2,
   )
+}
+
+function getRenderScale(plan: HousePlan) {
+  const bounds = getPlanBounds(plan)
+  if (!bounds) {
+    return plan.scale
+  }
+
+  const width = bounds.maxX - bounds.minX
+  const height = bounds.maxY - bounds.minY
+  const largestSideMeters = Math.max(width, height) / plan.scale
+
+  if (largestSideMeters >= 5 && largestSideMeters <= 25) {
+    return plan.scale
+  }
+
+  return Math.max(width, height) / fallbackBuildingWidthMeters
 }
 
 function toScenePoint([x, y]: Point, scale: number, center: THREE.Vector2) {
@@ -307,6 +338,7 @@ function FixtureMesh({
 
 function PlanScene({ plan }: { plan: HousePlan }) {
   const center = useMemo(() => getPlanCenter(plan), [plan])
+  const renderScale = useMemo(() => getRenderScale(plan), [plan])
 
   return (
     <>
@@ -314,13 +346,13 @@ function PlanScene({ plan }: { plan: HousePlan }) {
       <directionalLight position={[4, 8, 6]} intensity={1.8} />
       <group>
         {plan.spaces.map((space) => (
-          <SpaceMesh key={space.id} space={space} scale={plan.scale} center={center} />
+          <SpaceMesh key={space.id} space={space} scale={renderScale} center={center} />
         ))}
         {plan.walls.map((wall) => (
-          <WallMesh key={wall.id} wall={wall} scale={plan.scale} center={center} />
+          <WallMesh key={wall.id} wall={wall} scale={renderScale} center={center} />
         ))}
         {plan.fixtures.map((fixture) => (
-          <FixtureMesh key={fixture.id} fixture={fixture} scale={plan.scale} center={center} />
+          <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
         ))}
       </group>
       <gridHelper args={[16, 16, '#b9c0c6', '#e1e5e8']} position={[0, 0, 0]} />
