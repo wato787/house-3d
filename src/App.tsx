@@ -33,7 +33,7 @@ type Fixture = {
 type HousePlan = {
   scale: number
   spaces: Space[]
-  walls: Wall[]
+  walls?: Wall[]
   fixtures: Fixture[]
 }
 
@@ -179,7 +179,7 @@ function isPlan(value: unknown): value is HousePlan {
     typeof candidate.scale === 'number' &&
     candidate.scale > 0 &&
     Array.isArray(candidate.spaces) &&
-    Array.isArray(candidate.walls) &&
+    (candidate.walls === undefined || Array.isArray(candidate.walls)) &&
     Array.isArray(candidate.fixtures) &&
     candidate.spaces.every(
       (space) =>
@@ -190,7 +190,7 @@ function isPlan(value: unknown): value is HousePlan {
         space.polygon.length >= 3 &&
         space.polygon.every(isPoint),
     ) &&
-    candidate.walls.every(
+    (candidate.walls ?? []).every(
       (wall) => typeof wall.id === 'string' && isPoint(wall.start) && isPoint(wall.end),
     ) &&
     candidate.fixtures.every(
@@ -208,7 +208,7 @@ function isPlan(value: unknown): value is HousePlan {
 }
 
 function getStructuralPoints(plan: HousePlan) {
-  return [...plan.spaces.flatMap((space) => space.polygon), ...plan.walls.flatMap((wall) => [wall.start, wall.end])]
+  return plan.spaces.flatMap((space) => space.polygon)
 }
 
 function getPlanBounds(plan: HousePlan) {
@@ -258,6 +258,43 @@ function getRenderScale(plan: HousePlan) {
 
 function toScenePoint([x, y]: Point, scale: number, center: THREE.Vector2) {
   return new THREE.Vector3((x - center.x) / scale, 0, (y - center.y) / scale)
+}
+
+function edgeKey(start: Point, end: Point) {
+  const a = `${Math.round(start[0])},${Math.round(start[1])}`
+  const b = `${Math.round(end[0])},${Math.round(end[1])}`
+  return a < b ? `${a}|${b}` : `${b}|${a}`
+}
+
+function getSpaceWalls(spaces: Space[]) {
+  const edgeMap = new Map<
+    string,
+    {
+      start: Point
+      end: Point
+      count: number
+    }
+  >()
+
+  spaces.forEach((space) => {
+    space.polygon.forEach((start, index) => {
+      const end = space.polygon[(index + 1) % space.polygon.length]
+      const key = edgeKey(start, end)
+      const existing = edgeMap.get(key)
+
+      if (existing) {
+        existing.count += 1
+      } else {
+        edgeMap.set(key, { start, end, count: 1 })
+      }
+    })
+  })
+
+  return Array.from(edgeMap.values()).map((edge, index) => ({
+    id: `space-wall-${index}`,
+    start: edge.start,
+    end: edge.end,
+  }))
 }
 
 function SpaceMesh({
@@ -339,6 +376,7 @@ function FixtureMesh({
 function PlanScene({ plan }: { plan: HousePlan }) {
   const center = useMemo(() => getPlanCenter(plan), [plan])
   const renderScale = useMemo(() => getRenderScale(plan), [plan])
+  const generatedWalls = useMemo(() => getSpaceWalls(plan.spaces), [plan.spaces])
 
   return (
     <>
@@ -348,7 +386,7 @@ function PlanScene({ plan }: { plan: HousePlan }) {
         {plan.spaces.map((space) => (
           <SpaceMesh key={space.id} space={space} scale={renderScale} center={center} />
         ))}
-        {plan.walls.map((wall) => (
+        {generatedWalls.map((wall) => (
           <WallMesh key={wall.id} wall={wall} scale={renderScale} center={center} />
         ))}
         {plan.fixtures.map((fixture) => (
