@@ -538,6 +538,36 @@ function getWallSegments(wall: Wall & { hasOpening?: boolean }, openings: Openin
   return segments.filter((segment) => segment.end - segment.start > 0.08)
 }
 
+function getOpeningsByWall(
+  walls: Array<Wall & { hasOpening?: boolean }>,
+  openings: Opening[],
+  scale: number,
+) {
+  const openingsByWall = new Map<string, Opening[]>()
+
+  openings.forEach((opening) => {
+    const matchedWall = walls
+      .map((wall) => ({
+        wall,
+        projection: getOpeningProjection(wall, opening, scale),
+      }))
+      .filter((match): match is { wall: Wall & { hasOpening?: boolean }; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
+        Boolean(match.projection),
+      )
+      .sort((a, b) => a.projection.distanceFromWallMeters - b.projection.distanceFromWallMeters)[0]
+
+    if (!matchedWall) {
+      return
+    }
+
+    const assignedOpenings = openingsByWall.get(matchedWall.wall.id) ?? []
+    assignedOpenings.push(opening)
+    openingsByWall.set(matchedWall.wall.id, assignedOpenings)
+  })
+
+  return openingsByWall
+}
+
 function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass' | 'plaster') {
   const canvas = document.createElement('canvas')
   canvas.width = subtleTextureSize
@@ -765,35 +795,27 @@ function WallMesh({
 
 function WindowMesh({
   opening,
-  walls,
+  wall,
   scale,
   center,
 }: {
   opening: Opening
-  walls: Array<Wall & { hasOpening?: boolean }>
+  wall: Wall & { hasOpening?: boolean }
   scale: number
   center: THREE.Vector2
 }) {
-  const matchedWall = walls
-    .map((wall) => ({
-      wall,
-      projection: getOpeningProjection(wall, opening, scale),
-    }))
-    .filter((match): match is { wall: Wall & { hasOpening?: boolean }; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
-      Boolean(match.projection),
-    )
-    .sort((a, b) => a.projection.distanceFromWallMeters - b.projection.distanceFromWallMeters)[0]
+  const projection = getOpeningProjection(wall, opening, scale)
 
-  if (!matchedWall) {
+  if (!projection) {
     return null
   }
 
-  const start = toScenePoint(matchedWall.wall.start, scale, center)
-  const end = toScenePoint(matchedWall.wall.end, scale, center)
+  const start = toScenePoint(wall.start, scale, center)
+  const end = toScenePoint(wall.end, scale, center)
   const wallDirection = end.clone().sub(start).normalize()
   const wallAngle = Math.atan2(end.z - start.z, end.x - start.x)
-  const position = start.clone().add(wallDirection.multiplyScalar(matchedWall.projection.center))
-  const width = Math.max(matchedWall.projection.width - wallThickness * 0.2, 0.4)
+  const position = start.clone().add(wallDirection.multiplyScalar(projection.center))
+  const width = Math.max(projection.width - wallThickness * 0.2, 0.4)
   const glassHeight = wallHeight * 0.92
   const frameThickness = 0.035
 
@@ -1006,7 +1028,11 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
   const center = useMemo(() => getPlanCenter(plan), [plan])
   const renderScale = useMemo(() => getRenderScale(plan), [plan])
   const generatedWalls = useMemo(() => getSpaceWalls(plan.spaces), [plan.spaces])
-  const openings = plan.openings ?? []
+  const openings = useMemo(() => plan.openings ?? [], [plan.openings])
+  const openingsByWall = useMemo(
+    () => getOpeningsByWall(generatedWalls, openings, renderScale),
+    [generatedWalls, openings, renderScale],
+  )
 
   return (
     <>
@@ -1044,20 +1070,22 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
             wall={wall}
             scale={renderScale}
             center={center}
-            openings={openings}
+            openings={openingsByWall.get(wall.id) ?? []}
           />
         ))}
-        {openings
-          .filter((opening) => opening.kind === 'window')
-          .map((opening) => (
-            <WindowMesh
-              key={opening.id}
-              opening={opening}
-              walls={generatedWalls}
-              scale={renderScale}
-              center={center}
-            />
-          ))}
+        {generatedWalls.flatMap((wall) =>
+          (openingsByWall.get(wall.id) ?? [])
+            .filter((opening) => opening.kind === 'window')
+            .map((opening) => (
+              <WindowMesh
+                key={opening.id}
+                opening={opening}
+                wall={wall}
+                scale={renderScale}
+                center={center}
+              />
+            )),
+        )}
         {(plan.fixtures ?? []).map((fixture) => (
           <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
         ))}
