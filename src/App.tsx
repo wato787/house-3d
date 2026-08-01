@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { ContactShadows, Environment, OrbitControls, SoftShadows } from '@react-three/drei'
+import { ContactShadows, Edges, Environment, OrbitControls, SoftShadows } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
 import { generatePlanFromImage } from './gemini'
@@ -290,49 +290,7 @@ function toScenePoint([x, y]: Point, scale: number, center: THREE.Vector2) {
   return new THREE.Vector3((x - center.x) / scale, 0, (y - center.y) / scale)
 }
 
-function getSpaceCenter(space: Space, scale: number, center: THREE.Vector2) {
-  const scenePoints = space.polygon.map((point) => toScenePoint(point, scale, center))
-  const sum = scenePoints.reduce((total, point) => total.add(point), new THREE.Vector3())
-  return sum.multiplyScalar(1 / scenePoints.length)
-}
-
-function getSpaceSize(space: Space, scale: number) {
-  const xs = space.polygon.map(([x]) => x)
-  const ys = space.polygon.map(([, y]) => y)
-  return {
-    width: (Math.max(...xs) - Math.min(...xs)) / scale,
-    depth: (Math.max(...ys) - Math.min(...ys)) / scale,
-  }
-}
-
-function findSpace(spaces: Space[], patterns: RegExp[]) {
-  return spaces.find((space) => patterns.some((pattern) => pattern.test(space.name)))
-}
-
-function createSpaceViewpoint(
-  id: string,
-  label: string,
-  space: Space | undefined,
-  scale: number,
-  center: THREE.Vector2,
-) {
-  if (!space) {
-    return null
-  }
-
-  const target = getSpaceCenter(space, scale, center)
-  const size = getSpaceSize(space, scale)
-  const distance = Math.max(size.width, size.depth, 2.4)
-
-  return {
-    id,
-    label,
-    target: new THREE.Vector3(target.x, 1.0, target.z),
-    position: new THREE.Vector3(target.x + distance * 0.55, 2.3, target.z + distance * 0.85),
-  }
-}
-
-function getViewpoints(plan: HousePlan, scale: number, center: THREE.Vector2) {
+function getViewpoints(plan: HousePlan, scale: number) {
   const bounds = getPlanBounds(plan)
   const overallTarget = new THREE.Vector3(0, 1.1, 0)
   const overallDistance = bounds
@@ -350,11 +308,7 @@ function getViewpoints(plan: HousePlan, scale: number, center: THREE.Vector2) {
         overallDistance * 0.58,
       ),
     },
-    createSpaceViewpoint('ldk', 'LDK', findSpace(plan.spaces, [/ldk/i, /リビング/, /living/i]), scale, center),
-    createSpaceViewpoint('entry', '玄関', findSpace(plan.spaces, [/玄関/, /entry/i]), scale, center),
-    createSpaceViewpoint('water', '水回り', findSpace(plan.spaces, [/洗面/, /脱衣/, /浴室/, /ub/i, /bath/i]), scale, center),
-    createSpaceViewpoint('stairs', '階段', findSpace(plan.spaces, [/階段/, /stairs/i]), scale, center),
-  ].filter((viewpoint): viewpoint is Viewpoint => Boolean(viewpoint))
+  ]
 }
 
 function edgeKey(start: Point, end: Point) {
@@ -461,6 +415,81 @@ function getWallSegments(wall: Wall & { hasOpening?: boolean }, openings: Openin
   return segments.filter((segment) => segment.end - segment.start > 0.08)
 }
 
+function createPatternTexture(kind: 'wood' | 'tile' | 'concrete') {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return null
+  }
+
+  if (kind === 'wood') {
+    context.fillStyle = '#d8bd8c'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    for (let y = 0; y < canvas.height; y += 32) {
+      context.fillStyle = y % 64 === 0 ? '#caa978' : '#e0c698'
+      context.fillRect(0, y, canvas.width, 30)
+      context.strokeStyle = 'rgba(104, 72, 38, 0.16)'
+      context.lineWidth = 2
+      context.beginPath()
+      context.moveTo(0, y + 31)
+      context.lineTo(canvas.width, y + 31)
+      context.stroke()
+    }
+    for (let x = 0; x < canvas.width; x += 92) {
+      context.strokeStyle = 'rgba(104, 72, 38, 0.11)'
+      context.beginPath()
+      context.moveTo(x, 0)
+      context.lineTo(x + 36, canvas.height)
+      context.stroke()
+    }
+  } else if (kind === 'tile') {
+    context.fillStyle = '#dfe9ea'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.strokeStyle = 'rgba(107, 136, 141, 0.32)'
+    context.lineWidth = 3
+    for (let x = 0; x <= canvas.width; x += 64) {
+      context.beginPath()
+      context.moveTo(x, 0)
+      context.lineTo(x, canvas.height)
+      context.stroke()
+    }
+    for (let y = 0; y <= canvas.height; y += 64) {
+      context.beginPath()
+      context.moveTo(0, y)
+      context.lineTo(canvas.width, y)
+      context.stroke()
+    }
+  } else {
+    context.fillStyle = '#cfd4cf'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    for (let i = 0; i < 600; i += 1) {
+      const alpha = Math.random() * 0.08
+      context.fillStyle = `rgba(70, 78, 70, ${alpha})`
+      context.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1, 1)
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(kind === 'wood' ? 2.8 : 2, kind === 'wood' ? 2.8 : 2)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
+function getFloorKind(space: Space) {
+  if (/玄関|entry/i.test(space.name)) {
+    return 'concrete'
+  }
+  if (/浴室|洗面|脱衣|ub|bath|toilet|トイレ/i.test(space.name)) {
+    return 'tile'
+  }
+  return 'wood'
+}
+
 function SpaceMesh({
   space,
   scale,
@@ -470,6 +499,7 @@ function SpaceMesh({
   scale: number
   center: THREE.Vector2
 }) {
+  const texture = useMemo(() => createPatternTexture(getFloorKind(space)), [space])
   const shape = new THREE.Shape()
   space.polygon.forEach((point, index) => {
     const scenePoint = toScenePoint(point, scale, center)
@@ -484,7 +514,7 @@ function SpaceMesh({
   return (
     <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
       <shapeGeometry args={[shape]} />
-      <meshStandardMaterial color={space.color} roughness={0.72} />
+      <meshStandardMaterial color="#ffffff" map={texture ?? undefined} roughness={0.78} />
     </mesh>
   )
 }
@@ -524,6 +554,7 @@ function WallMesh({
           >
             <boxGeometry args={[segmentLength, wallHeight, wallThickness]} />
             <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
+            <Edges color="rgba(96, 88, 76, 0.22)" threshold={35} />
           </mesh>
         )
       })}
@@ -552,14 +583,17 @@ function FixtureMesh({
         <mesh castShadow receiveShadow position={[0, 0.43, 0]}>
           <boxGeometry args={[width, 0.86, depth]} />
           <meshStandardMaterial color="#d8d2c6" roughness={0.62} />
+          <Edges color="rgba(67, 61, 53, 0.2)" threshold={35} />
         </mesh>
         <mesh castShadow receiveShadow position={[width * 0.18, 0.9, 0]}>
           <boxGeometry args={[width * 0.18, 0.04, depth * 0.55]} />
           <meshStandardMaterial color="#8fb0b6" roughness={0.3} metalness={0.2} />
+          <Edges color="rgba(40, 76, 82, 0.22)" threshold={35} />
         </mesh>
         <mesh castShadow receiveShadow position={[-width * 0.2, 0.91, 0]}>
           <boxGeometry args={[width * 0.22, 0.03, depth * 0.55]} />
           <meshStandardMaterial color="#303330" roughness={0.5} />
+          <Edges color="rgba(255, 255, 255, 0.22)" threshold={35} />
         </mesh>
       </group>
     )
@@ -571,10 +605,12 @@ function FixtureMesh({
         <mesh castShadow receiveShadow position={[0, 0.22, 0]}>
           <boxGeometry args={[width, 0.44, depth]} />
           <meshStandardMaterial color="#dcecef" roughness={0.45} />
+          <Edges color="rgba(69, 100, 108, 0.2)" threshold={35} />
         </mesh>
         <mesh castShadow receiveShadow position={[0, 0.48, 0]}>
           <boxGeometry args={[width * 0.72, 0.12, depth * 0.62]} />
           <meshStandardMaterial color="#ffffff" roughness={0.38} />
+          <Edges color="rgba(69, 100, 108, 0.14)" threshold={35} />
         </mesh>
       </group>
     )
@@ -586,10 +622,12 @@ function FixtureMesh({
         <mesh castShadow receiveShadow position={[0, 0.2, depth * 0.12]}>
           <boxGeometry args={[width * 0.62, 0.4, depth * 0.64]} />
           <meshStandardMaterial color="#ffffff" roughness={0.34} />
+          <Edges color="rgba(75, 75, 70, 0.14)" threshold={35} />
         </mesh>
         <mesh castShadow receiveShadow position={[0, 0.36, -depth * 0.26]}>
           <boxGeometry args={[width * 0.7, 0.72, depth * 0.18]} />
           <meshStandardMaterial color="#f4f4f1" roughness={0.4} />
+          <Edges color="rgba(75, 75, 70, 0.14)" threshold={35} />
         </mesh>
       </group>
     )
@@ -604,6 +642,7 @@ function FixtureMesh({
     >
       <boxGeometry args={[width, height, depth]} />
       <meshStandardMaterial color={fixture.color} roughness={0.64} />
+      <Edges color="rgba(55, 55, 50, 0.18)" threshold={35} />
     </mesh>
   )
 }
@@ -645,6 +684,7 @@ function OpeningMesh({
       <mesh castShadow position={[position.x, 1.28, position.z]} rotation={[0, -wallAngle, 0]}>
         <boxGeometry args={[width, 0.82, 0.035]} />
         <meshStandardMaterial color="#9fc8d4" transparent opacity={0.55} roughness={0.2} />
+        <Edges color="rgba(54, 100, 112, 0.28)" threshold={35} />
       </mesh>
     )
   }
@@ -654,10 +694,12 @@ function OpeningMesh({
       <mesh castShadow receiveShadow position={[width * 0.23, 1.0, wallThickness * 1.1]}>
         <boxGeometry args={[width * 0.46, 2.0, 0.035]} />
         <meshStandardMaterial color="#b7895b" roughness={0.58} />
+        <Edges color="rgba(76, 48, 27, 0.24)" threshold={35} />
       </mesh>
       <mesh castShadow receiveShadow position={[0, 2.05, 0]}>
         <boxGeometry args={[width, 0.08, wallThickness * 1.2]} />
         <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
+        <Edges color="rgba(96, 88, 76, 0.18)" threshold={35} />
       </mesh>
     </group>
   )
@@ -802,11 +844,10 @@ function App() {
   }, [jsonText])
 
   const activePlan = parsed.plan ?? samplePlan
-  const activeCenter = useMemo(() => getPlanCenter(activePlan), [activePlan])
   const activeScale = useMemo(() => getRenderScale(activePlan), [activePlan])
   const viewpoints = useMemo(
-    () => getViewpoints(activePlan, activeScale, activeCenter),
-    [activePlan, activeCenter, activeScale],
+    () => getViewpoints(activePlan, activeScale),
+    [activePlan, activeScale],
   )
   const selectedViewpoint =
     viewpoints.find((viewpoint) => viewpoint.id === selectedViewpointId) ?? viewpoints[0]
