@@ -186,6 +186,14 @@ const samplePlan: HousePlan = {
       color: '#f4f7f5',
     },
     {
+      id: 'stairs',
+      kind: 'stairs',
+      position: [9750, 5200],
+      size: [1500, 2200],
+      rotation: 90,
+      color: '#d7c3a0',
+    },
+    {
       id: 'sofa',
       kind: 'sofa',
       position: [1700, 5200],
@@ -837,6 +845,37 @@ function FixtureMesh({
         <mesh castShadow receiveShadow position={[0, 0.36, -depth * 0.26]}>
           <boxGeometry args={[width * 0.7, 0.72, depth * 0.18]} />
           <meshStandardMaterial color="#f4f4f1" roughness={0.4} />
+        </mesh>
+      </group>
+    )
+  }
+
+  if (fixture.kind === 'stairs') {
+    const stepCount = 12
+    const stepDepth = depth / stepCount
+    const stepRise = 0.075
+
+    return (
+      <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
+        {Array.from({ length: stepCount }).map((_, index) => {
+          const stepHeight = stepRise * (index + 1)
+          const z = -depth / 2 + stepDepth * index + stepDepth / 2
+
+          return (
+            <mesh
+              castShadow
+              receiveShadow
+              key={`${fixture.id}-step-${index}`}
+              position={[0, stepHeight / 2, z]}
+            >
+              <boxGeometry args={[width, stepHeight, stepDepth * 0.96]} />
+              <meshStandardMaterial color="#d2b987" roughness={0.7} />
+            </mesh>
+          )
+        })}
+        <mesh receiveShadow position={[0, stepRise * stepCount + 0.01, 0]}>
+          <boxGeometry args={[width * 0.86, 0.025, depth * 0.92]} />
+          <meshStandardMaterial color="#b8955e" roughness={0.62} />
         </mesh>
       </group>
     )
