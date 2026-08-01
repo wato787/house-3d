@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
+import { generatePlanFromImage } from './gemini'
 import './App.css'
 
 type Point = [number, number]
@@ -331,7 +332,10 @@ function PlanScene({ plan }: { plan: HousePlan }) {
 function App() {
   const [jsonText, setJsonText] = useState(() => JSON.stringify(samplePlan, null, 2))
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationError, setGenerationError] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<{
+    file: File
     name: string
     url: string
   } | null>(null)
@@ -360,6 +364,7 @@ function App() {
         }
 
         return {
+          file,
           name: file.name,
           url: URL.createObjectURL(file),
         }
@@ -385,6 +390,29 @@ function App() {
   }, [jsonText])
 
   const activePlan = parsed.plan ?? samplePlan
+  const canGenerate = Boolean(imagePreview) && !isGenerating
+
+  async function handleCreatePreview() {
+    if (!imagePreview) {
+      return
+    }
+
+    setIsGenerating(true)
+    setGenerationError(null)
+
+    try {
+      const generatedJson = await generatePlanFromImage(imagePreview.file)
+      JSON.parse(generatedJson)
+      setJsonText(generatedJson)
+      setIsDetailsOpen(false)
+    } catch (error) {
+      setGenerationError(
+        error instanceof Error ? error.message : '3Dプレビューの作成に失敗しました。',
+      )
+    } finally {
+      setIsGenerating(false)
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -414,16 +442,28 @@ function App() {
           {imagePreview ? (
             <div className="image-meta">
               <span>{imagePreview.name}</span>
-              <button type="button" onClick={() => setImagePreview(null)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setImagePreview(null)
+                  setGenerationError(null)
+                }}
+              >
                 クリア
               </button>
             </div>
           ) : null}
         </section>
 
-        <button type="button" className="primary-action" disabled={!imagePreview}>
-          3Dプレビューを作成
+        <button
+          type="button"
+          className="primary-action"
+          disabled={!canGenerate}
+          onClick={handleCreatePreview}
+        >
+          {isGenerating ? '作成中...' : '3Dプレビューを作成'}
         </button>
+        {generationError ? <p className="generation-error">{generationError}</p> : null}
 
         <section className="panel">
           <button
