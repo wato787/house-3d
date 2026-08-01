@@ -688,6 +688,8 @@ function WallMesh({
     <>
       {segments.map((segment, index) => {
         const segmentLength = segment.end - segment.start
+        const overlap = wallThickness * 0.65
+        const renderedLength = segmentLength + overlap
         const midpoint = start
           .clone()
           .add(direction.clone().multiplyScalar(segment.start + segmentLength / 2))
@@ -700,7 +702,7 @@ function WallMesh({
             position={[midpoint.x, wallHeight / 2, midpoint.z]}
             rotation={[0, -angle, 0]}
           >
-            <boxGeometry args={[segmentLength, wallHeight, wallThickness]} />
+            <boxGeometry args={[renderedLength, wallHeight, wallThickness]} />
             <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
           </mesh>
         )
@@ -786,50 +788,6 @@ function FixtureMesh({
   )
 }
 
-function OpeningMesh({
-  opening,
-  walls,
-  scale,
-  center,
-}: {
-  opening: Opening
-  walls: Array<Wall & { hasOpening?: boolean }>
-  scale: number
-  center: THREE.Vector2
-}) {
-  const matchedWall = walls
-    .map((wall) => ({
-      wall,
-      projection: getOpeningProjection(wall, opening, scale),
-    }))
-    .filter((match): match is { wall: Wall & { hasOpening?: boolean }; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
-      Boolean(match.projection),
-    )
-    .sort((a, b) => a.projection.center - b.projection.center)[0]
-
-  if (!matchedWall) {
-    return null
-  }
-
-  const start = toScenePoint(matchedWall.wall.start, scale, center)
-  const end = toScenePoint(matchedWall.wall.end, scale, center)
-  const wallDirection = end.clone().sub(start).normalize()
-  const wallAngle = Math.atan2(end.z - start.z, end.x - start.x)
-  const position = start.clone().add(wallDirection.multiplyScalar(matchedWall.projection.center))
-  const width = matchedWall.projection.width
-
-  if (opening.kind === 'window') {
-    return (
-      <mesh castShadow position={[position.x, 0.72, position.z]} rotation={[0, -wallAngle, 0]}>
-        <boxGeometry args={[width, 0.42, 0.035]} />
-        <meshStandardMaterial color="#9fc8d4" transparent opacity={0.55} roughness={0.2} />
-      </mesh>
-    )
-  }
-
-  return null
-}
-
 function CameraViewpoint({ viewpoint }: { viewpoint: Viewpoint }) {
   const { camera } = useThree()
 
@@ -884,15 +842,6 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
             scale={renderScale}
             center={center}
             openings={openings}
-          />
-        ))}
-        {openings.map((opening) => (
-          <OpeningMesh
-            key={opening.id}
-            opening={opening}
-            walls={generatedWalls}
-            scale={renderScale}
-            center={center}
           />
         ))}
         {(plan.fixtures ?? []).map((fixture) => (
