@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
+import { ContactShadows, Environment, OrbitControls, RoundedBox } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
 import { generatePlanFromImage } from './gemini'
@@ -217,6 +217,7 @@ const wallThickness = 0.12
 const doorwayWidthMeters = 0.9
 const fallbackBuildingWidthMeters = 13.2
 const openingSnapDistanceMeters = 0.55
+const subtleTextureSize = 256
 
 function isPoint(value: unknown): value is Point {
   return (
@@ -515,10 +516,10 @@ function getWallSegments(wall: Wall & { hasOpening?: boolean }, openings: Openin
   return segments.filter((segment) => segment.end - segment.start > 0.08)
 }
 
-function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass') {
+function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass' | 'plaster') {
   const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 256
+  canvas.width = subtleTextureSize
+  canvas.height = subtleTextureSize
   const context = canvas.getContext('2d')
 
   if (!context) {
@@ -526,20 +527,25 @@ function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass') {
   }
 
   if (kind === 'wood') {
-    context.fillStyle = '#d8bd8c'
+    context.fillStyle = '#d7bd88'
     context.fillRect(0, 0, canvas.width, canvas.height)
-    for (let y = 0; y < canvas.height; y += 32) {
-      context.fillStyle = y % 64 === 0 ? '#caa978' : '#e0c698'
-      context.fillRect(0, y, canvas.width, 30)
-      context.strokeStyle = 'rgba(104, 72, 38, 0.16)'
-      context.lineWidth = 2
+    for (let y = 0; y < canvas.height; y += 28) {
+      context.fillStyle = y % 56 === 0 ? '#cba978' : '#e0c596'
+      context.fillRect(0, y, canvas.width, 26)
+      context.strokeStyle = 'rgba(92, 62, 30, 0.14)'
+      context.lineWidth = 1.5
       context.beginPath()
-      context.moveTo(0, y + 31)
-      context.lineTo(canvas.width, y + 31)
+      context.moveTo(0, y + 27)
+      context.lineTo(canvas.width, y + 27)
       context.stroke()
     }
-    for (let x = 0; x < canvas.width; x += 92) {
-      context.strokeStyle = 'rgba(104, 72, 38, 0.11)'
+    for (let i = 0; i < 1800; i += 1) {
+      const alpha = Math.random() * 0.055
+      context.fillStyle = Math.random() > 0.5 ? `rgba(76, 45, 20, ${alpha})` : `rgba(255, 238, 194, ${alpha})`
+      context.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1, 1)
+    }
+    for (let x = 0; x < canvas.width; x += 86) {
+      context.strokeStyle = 'rgba(92, 62, 30, 0.09)'
       context.beginPath()
       context.moveTo(x, 0)
       context.lineTo(x + 36, canvas.height)
@@ -570,6 +576,14 @@ function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass') {
       context.fillStyle = Math.random() > 0.5 ? `rgba(35, 91, 38, ${alpha})` : `rgba(175, 214, 121, ${alpha})`
       context.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 2, 2)
     }
+  } else if (kind === 'plaster') {
+    context.fillStyle = '#f2eee5'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    for (let i = 0; i < 1400; i += 1) {
+      const alpha = Math.random() * 0.055
+      context.fillStyle = Math.random() > 0.45 ? `rgba(130, 122, 106, ${alpha})` : `rgba(255, 255, 252, ${alpha})`
+      context.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1, 1)
+    }
   } else {
     context.fillStyle = '#cfd4cf'
     context.fillRect(0, 0, canvas.width, canvas.height)
@@ -583,7 +597,11 @@ function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass') {
   const texture = new THREE.CanvasTexture(canvas)
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(kind === 'wood' ? 2.8 : kind === 'grass' ? 3.8 : 2, kind === 'wood' ? 2.8 : kind === 'grass' ? 3.8 : 2)
+  texture.repeat.set(
+    kind === 'wood' ? 4.2 : kind === 'grass' ? 4.6 : kind === 'plaster' ? 1.8 : 2.4,
+    kind === 'wood' ? 4.2 : kind === 'grass' ? 4.6 : kind === 'plaster' ? 1.8 : 2.4,
+  )
+  texture.anisotropy = 6
   texture.colorSpace = THREE.SRGBColorSpace
   return texture
 }
@@ -692,6 +710,7 @@ function WallMesh({
   const angle = Math.atan2(end.z - start.z, end.x - start.x)
   const direction = end.clone().sub(start).normalize()
   const segments = getWallSegments(wall, openings, scale)
+  const wallTexture = useMemo(() => createPatternTexture('plaster'), [])
 
   return (
     <>
@@ -704,16 +723,18 @@ function WallMesh({
           .add(direction.clone().multiplyScalar(segment.start + segmentLength / 2))
 
         return (
-          <mesh
+          <RoundedBox
             castShadow
             receiveShadow
             key={`${wall.id}-${index}`}
+            args={[renderedLength, wallHeight, wallThickness]}
+            radius={0.025}
+            smoothness={3}
             position={[midpoint.x, wallHeight / 2, midpoint.z]}
             rotation={[0, -angle, 0]}
           >
-            <boxGeometry args={[renderedLength, wallHeight, wallThickness]} />
-            <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
-          </mesh>
+            <meshStandardMaterial color="#f5f0e7" map={wallTexture ?? undefined} roughness={0.9} />
+          </RoundedBox>
         )
       })}
     </>
@@ -758,12 +779,14 @@ function WindowMesh({
     <group position={[position.x, glassHeight / 2, position.z]} rotation={[0, -wallAngle, 0]}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[width, glassHeight, wallThickness * 0.42]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color="#b9d7df"
           transparent
-          opacity={0.48}
-          roughness={0.18}
-          metalness={0.02}
+          opacity={0.38}
+          roughness={0.05}
+          metalness={0}
+          transmission={0.35}
+          thickness={0.04}
         />
       </mesh>
       <mesh castShadow receiveShadow position={[-width / 2, 0, 0]}>
@@ -804,18 +827,18 @@ function FixtureMesh({
   if (fixture.kind === 'kitchen') {
     return (
       <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
-        <mesh castShadow receiveShadow position={[0, 0.43, 0]}>
-          <boxGeometry args={[width, 0.86, depth]} />
-          <meshStandardMaterial color="#d8d2c6" roughness={0.62} />
-        </mesh>
-        <mesh castShadow receiveShadow position={[width * 0.18, 0.9, 0]}>
-          <boxGeometry args={[width * 0.18, 0.04, depth * 0.55]} />
-          <meshStandardMaterial color="#8fb0b6" roughness={0.3} metalness={0.2} />
-        </mesh>
-        <mesh castShadow receiveShadow position={[-width * 0.2, 0.91, 0]}>
-          <boxGeometry args={[width * 0.22, 0.03, depth * 0.55]} />
-          <meshStandardMaterial color="#303330" roughness={0.5} />
-        </mesh>
+        <RoundedBox castShadow receiveShadow args={[width, 0.86, depth]} radius={0.035} smoothness={4} position={[0, 0.43, 0]}>
+          <meshStandardMaterial color="#d7d1c5" roughness={0.7} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width * 0.94, 0.055, depth * 0.94]} radius={0.025} smoothness={3} position={[0, 0.89, 0]}>
+          <meshStandardMaterial color="#f0eadf" roughness={0.46} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width * 0.18, 0.035, depth * 0.52]} radius={0.02} smoothness={3} position={[width * 0.18, 0.935, 0]}>
+          <meshStandardMaterial color="#86a9af" roughness={0.25} metalness={0.15} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width * 0.22, 0.028, depth * 0.52]} radius={0.018} smoothness={3} position={[-width * 0.22, 0.94, 0]}>
+          <meshStandardMaterial color="#262926" roughness={0.42} />
+        </RoundedBox>
       </group>
     )
   }
@@ -823,14 +846,12 @@ function FixtureMesh({
   if (fixture.kind === 'bath' || fixture.kind === 'bathtub') {
     return (
       <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
-        <mesh castShadow receiveShadow position={[0, 0.22, 0]}>
-          <boxGeometry args={[width, 0.44, depth]} />
-          <meshStandardMaterial color="#dcecef" roughness={0.45} />
-        </mesh>
-        <mesh castShadow receiveShadow position={[0, 0.48, 0]}>
-          <boxGeometry args={[width * 0.72, 0.12, depth * 0.62]} />
-          <meshStandardMaterial color="#ffffff" roughness={0.38} />
-        </mesh>
+        <RoundedBox castShadow receiveShadow args={[width, 0.44, depth]} radius={0.08} smoothness={6} position={[0, 0.22, 0]}>
+          <meshStandardMaterial color="#dcecef" roughness={0.42} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width * 0.72, 0.12, depth * 0.62]} radius={0.06} smoothness={6} position={[0, 0.48, 0]}>
+          <meshStandardMaterial color="#fbfbf7" roughness={0.32} />
+        </RoundedBox>
       </group>
     )
   }
@@ -838,14 +859,12 @@ function FixtureMesh({
   if (fixture.kind === 'toilet') {
     return (
       <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
-        <mesh castShadow receiveShadow position={[0, 0.2, depth * 0.12]}>
-          <boxGeometry args={[width * 0.62, 0.4, depth * 0.64]} />
-          <meshStandardMaterial color="#ffffff" roughness={0.34} />
-        </mesh>
-        <mesh castShadow receiveShadow position={[0, 0.36, -depth * 0.26]}>
-          <boxGeometry args={[width * 0.7, 0.72, depth * 0.18]} />
-          <meshStandardMaterial color="#f4f4f1" roughness={0.4} />
-        </mesh>
+        <RoundedBox castShadow receiveShadow args={[width * 0.62, 0.4, depth * 0.64]} radius={0.08} smoothness={6} position={[0, 0.2, depth * 0.12]}>
+          <meshStandardMaterial color="#fbfbf7" roughness={0.34} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width * 0.7, 0.72, depth * 0.18]} radius={0.045} smoothness={5} position={[0, 0.36, -depth * 0.26]}>
+          <meshStandardMaterial color="#f1f0ea" roughness={0.42} />
+        </RoundedBox>
       </group>
     )
   }
@@ -862,35 +881,38 @@ function FixtureMesh({
           const z = -depth / 2 + stepDepth * index + stepDepth / 2
 
           return (
-            <mesh
+            <RoundedBox
               castShadow
               receiveShadow
               key={`${fixture.id}-step-${index}`}
+              args={[width, stepHeight, stepDepth * 0.96]}
+              radius={0.018}
+              smoothness={2}
               position={[0, stepHeight / 2, z]}
             >
-              <boxGeometry args={[width, stepHeight, stepDepth * 0.96]} />
               <meshStandardMaterial color="#d2b987" roughness={0.7} />
-            </mesh>
+            </RoundedBox>
           )
         })}
-        <mesh receiveShadow position={[0, stepRise * stepCount + 0.01, 0]}>
-          <boxGeometry args={[width * 0.86, 0.025, depth * 0.92]} />
+        <RoundedBox receiveShadow args={[width * 0.86, 0.025, depth * 0.92]} radius={0.02} smoothness={2} position={[0, stepRise * stepCount + 0.01, 0]}>
           <meshStandardMaterial color="#b8955e" roughness={0.62} />
-        </mesh>
+        </RoundedBox>
       </group>
     )
   }
 
   return (
-    <mesh
+    <RoundedBox
       castShadow
       receiveShadow
+      args={[width, height, depth]}
+      radius={0.035}
+      smoothness={4}
       position={[position.x, height / 2 + 0.045, position.z]}
       rotation={[0, rotation, 0]}
     >
-      <boxGeometry args={[width, height, depth]} />
       <meshStandardMaterial color={fixture.color} roughness={0.64} />
-    </mesh>
+    </RoundedBox>
   )
 }
 
@@ -914,13 +936,13 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
   return (
     <>
       <color attach="background" args={['#eef2ec']} />
-      <ambientLight intensity={0.45} />
-      <hemisphereLight args={['#ffffff', '#c7bca8', 0.85]} />
+      <ambientLight intensity={0.58} />
+      <hemisphereLight args={['#fffaf0', '#b9c8bb', 1.05]} />
       <directionalLight
         castShadow
-        position={[4, 8, 6]}
-        intensity={2.1}
-        shadow-mapSize={[1024, 1024]}
+        position={[4.8, 9, 5.2]}
+        intensity={1.65}
+        shadow-mapSize={[2048, 2048]}
         shadow-camera-near={1}
         shadow-camera-far={28}
         shadow-camera-left={-12}
@@ -928,7 +950,7 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
         shadow-camera-top={12}
         shadow-camera-bottom={-12}
       />
-      <Environment preset="apartment" environmentIntensity={0.45} />
+      <Environment preset="city" environmentIntensity={0.36} />
       <group>
         {(plan.outdoorAreas ?? []).map((area) => (
           <OutdoorAreaMesh key={area.id} area={area} scale={renderScale} center={center} />
