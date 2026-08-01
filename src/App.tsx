@@ -188,7 +188,7 @@ const samplePlan: HousePlan = {
     {
       id: 'sofa',
       kind: 'sofa',
-      position: [5400, 5200],
+      position: [1700, 5200],
       size: [1600, 900],
       rotation: 90,
       color: '#d6d1c9',
@@ -196,7 +196,7 @@ const samplePlan: HousePlan = {
     {
       id: 'table',
       kind: 'table',
-      position: [6200, 5400],
+      position: [3400, 5200],
       size: [1400, 900],
       rotation: 0,
       color: '#a8503c',
@@ -609,7 +609,7 @@ function SpaceMesh({
   shape.closePath()
 
   return (
-    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006 + index * 0.0002, 0]}>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]}>
       <shapeGeometry args={[shape]} />
       <meshStandardMaterial
         color="#ffffff"
@@ -682,7 +682,7 @@ function FixtureMesh({
 
   if (fixture.kind === 'kitchen') {
     return (
-      <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
+      <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
         <mesh castShadow receiveShadow position={[0, 0.43, 0]}>
           <boxGeometry args={[width, 0.86, depth]} />
           <meshStandardMaterial color="#d8d2c6" roughness={0.62} />
@@ -701,7 +701,7 @@ function FixtureMesh({
 
   if (fixture.kind === 'bath' || fixture.kind === 'bathtub') {
     return (
-      <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
+      <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
         <mesh castShadow receiveShadow position={[0, 0.22, 0]}>
           <boxGeometry args={[width, 0.44, depth]} />
           <meshStandardMaterial color="#dcecef" roughness={0.45} />
@@ -716,7 +716,7 @@ function FixtureMesh({
 
   if (fixture.kind === 'toilet') {
     return (
-      <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
+      <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
         <mesh castShadow receiveShadow position={[0, 0.2, depth * 0.12]}>
           <boxGeometry args={[width * 0.62, 0.4, depth * 0.64]} />
           <meshStandardMaterial color="#ffffff" roughness={0.34} />
@@ -733,7 +733,7 @@ function FixtureMesh({
     <mesh
       castShadow
       receiveShadow
-      position={[position.x, height / 2 + 0.02, position.z]}
+      position={[position.x, height / 2 + 0.045, position.z]}
       rotation={[0, rotation, 0]}
     >
       <boxGeometry args={[width, height, depth]} />
