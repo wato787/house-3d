@@ -198,7 +198,7 @@ const samplePlan: HousePlan = {
       kind: 'sofa',
       position: [1700, 5200],
       size: [1600, 900],
-      rotation: 90,
+      rotation: 0,
       color: '#d6d1c9',
     },
     {
@@ -943,18 +943,21 @@ function FixtureMesh({
   }
 
   if (/sofa/i.test(fixture.kind)) {
+    const sofaWidth = Math.max(width, depth)
+    const sofaDepth = Math.min(width, depth)
+
     return (
       <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
-        <RoundedBox castShadow receiveShadow args={[width, 0.32, depth]} radius={0.09} smoothness={6} position={[0, 0.16, 0]}>
+        <RoundedBox castShadow receiveShadow args={[sofaWidth, 0.28, sofaDepth]} radius={0.09} smoothness={6} position={[0, 0.14, 0]}>
           <meshStandardMaterial color={fixture.color || '#cfc9bf'} roughness={0.86} />
         </RoundedBox>
-        <RoundedBox castShadow receiveShadow args={[width, 0.58, depth * 0.18]} radius={0.07} smoothness={6} position={[0, 0.34, -depth * 0.42]}>
+        <RoundedBox castShadow receiveShadow args={[sofaWidth, 0.44, sofaDepth * 0.16]} radius={0.07} smoothness={6} position={[0, 0.34, -sofaDepth * 0.42]}>
           <meshStandardMaterial color="#bdb5aa" roughness={0.9} />
         </RoundedBox>
-        <RoundedBox castShadow receiveShadow args={[width * 0.14, 0.42, depth * 0.86]} radius={0.06} smoothness={5} position={[-width * 0.46, 0.28, 0]}>
+        <RoundedBox castShadow receiveShadow args={[sofaWidth * 0.11, 0.34, sofaDepth * 0.82]} radius={0.06} smoothness={5} position={[-sofaWidth * 0.46, 0.23, 0]}>
           <meshStandardMaterial color="#beb6ab" roughness={0.88} />
         </RoundedBox>
-        <RoundedBox castShadow receiveShadow args={[width * 0.14, 0.42, depth * 0.86]} radius={0.06} smoothness={5} position={[width * 0.46, 0.28, 0]}>
+        <RoundedBox castShadow receiveShadow args={[sofaWidth * 0.11, 0.34, sofaDepth * 0.82]} radius={0.06} smoothness={5} position={[sofaWidth * 0.46, 0.23, 0]}>
           <meshStandardMaterial color="#beb6ab" roughness={0.88} />
         </RoundedBox>
       </group>
