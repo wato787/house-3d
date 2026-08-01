@@ -276,13 +276,56 @@ function isPlan(value: unknown): value is HousePlan {
   )
 }
 
+function isPointInPolygon(point: Point, polygon: Point[]) {
+  const [px, py] = point
+  let isInside = false
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const [xi, yi] = polygon[i]
+    const [xj, yj] = polygon[j]
+    const intersects = yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi
+
+    if (intersects) {
+      isInside = !isInside
+    }
+  }
+
+  return isInside
+}
+
+function getPolygonCenter(polygon: Point[]): Point {
+  const total = polygon.reduce(
+    ([sumX, sumY], [x, y]) => [sumX + x, sumY + y],
+    [0, 0] as Point,
+  )
+  return [total[0] / polygon.length, total[1] / polygon.length]
+}
+
+function doesOutdoorAreaOverlapSpaces(area: OutdoorArea, spaces: Space[]) {
+  return spaces.some((space) => {
+    const center = getPolygonCenter(area.polygon)
+    return (
+      isPointInPolygon(center, space.polygon) ||
+      area.polygon.some((point) => isPointInPolygon(point, space.polygon))
+    )
+  })
+}
+
+function isSupportedFixture(fixture: Fixture) {
+  return /kitchen|bath|bathtub|toilet|sink|washbasin|basin|stairs/i.test(fixture.kind)
+}
+
 function normalizePlan(plan: HousePlan): HousePlan {
+  const spaces = plan.spaces
+
   return {
     ...plan,
-    outdoorAreas: plan.outdoorAreas ?? [],
+    outdoorAreas: (plan.outdoorAreas ?? []).filter(
+      (area) => !doesOutdoorAreaOverlapSpaces(area, spaces),
+    ),
     walls: plan.walls ?? [],
     openings: plan.openings ?? [],
-    fixtures: plan.fixtures ?? [],
+    fixtures: (plan.fixtures ?? []).filter(isSupportedFixture),
   }
 }
 
