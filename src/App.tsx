@@ -774,18 +774,7 @@ function OpeningMesh({
     )
   }
 
-  return (
-    <group position={[position.x, 0.02, position.z]} rotation={[0, -wallAngle, 0]}>
-      <mesh castShadow receiveShadow position={[width * 0.23, 1.0, wallThickness * 1.1]}>
-        <boxGeometry args={[width * 0.46, 2.0, 0.035]} />
-        <meshStandardMaterial color="#b7895b" roughness={0.58} />
-      </mesh>
-      <mesh castShadow receiveShadow position={[0, 2.05, 0]}>
-        <boxGeometry args={[width, 0.08, wallThickness * 1.2]} />
-        <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
-      </mesh>
-    </group>
-  )
+  return null
 }
 
 function CameraViewpoint({ viewpoint }: { viewpoint: Viewpoint }) {
