@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { ContactShadows, Environment, OrbitControls, SoftShadows } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
 import { generatePlanFromImage } from './gemini'
@@ -482,7 +482,7 @@ function SpaceMesh({
   shape.closePath()
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
       <shapeGeometry args={[shape]} />
       <meshStandardMaterial color={space.color} roughness={0.72} />
     </mesh>
@@ -516,6 +516,8 @@ function WallMesh({
 
         return (
           <mesh
+            castShadow
+            receiveShadow
             key={`${wall.id}-${index}`}
             position={[midpoint.x, wallHeight / 2, midpoint.z]}
             rotation={[0, -angle, 0]}
@@ -547,15 +549,15 @@ function FixtureMesh({
   if (fixture.kind === 'kitchen') {
     return (
       <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
-        <mesh position={[0, 0.43, 0]}>
+        <mesh castShadow receiveShadow position={[0, 0.43, 0]}>
           <boxGeometry args={[width, 0.86, depth]} />
           <meshStandardMaterial color="#d8d2c6" roughness={0.62} />
         </mesh>
-        <mesh position={[width * 0.18, 0.9, 0]}>
+        <mesh castShadow receiveShadow position={[width * 0.18, 0.9, 0]}>
           <boxGeometry args={[width * 0.18, 0.04, depth * 0.55]} />
           <meshStandardMaterial color="#8fb0b6" roughness={0.3} metalness={0.2} />
         </mesh>
-        <mesh position={[-width * 0.2, 0.91, 0]}>
+        <mesh castShadow receiveShadow position={[-width * 0.2, 0.91, 0]}>
           <boxGeometry args={[width * 0.22, 0.03, depth * 0.55]} />
           <meshStandardMaterial color="#303330" roughness={0.5} />
         </mesh>
@@ -566,11 +568,11 @@ function FixtureMesh({
   if (fixture.kind === 'bath' || fixture.kind === 'bathtub') {
     return (
       <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
-        <mesh position={[0, 0.22, 0]}>
+        <mesh castShadow receiveShadow position={[0, 0.22, 0]}>
           <boxGeometry args={[width, 0.44, depth]} />
           <meshStandardMaterial color="#dcecef" roughness={0.45} />
         </mesh>
-        <mesh position={[0, 0.48, 0]}>
+        <mesh castShadow receiveShadow position={[0, 0.48, 0]}>
           <boxGeometry args={[width * 0.72, 0.12, depth * 0.62]} />
           <meshStandardMaterial color="#ffffff" roughness={0.38} />
         </mesh>
@@ -581,11 +583,11 @@ function FixtureMesh({
   if (fixture.kind === 'toilet') {
     return (
       <group position={[position.x, 0.02, position.z]} rotation={[0, rotation, 0]}>
-        <mesh position={[0, 0.2, depth * 0.12]}>
+        <mesh castShadow receiveShadow position={[0, 0.2, depth * 0.12]}>
           <boxGeometry args={[width * 0.62, 0.4, depth * 0.64]} />
           <meshStandardMaterial color="#ffffff" roughness={0.34} />
         </mesh>
-        <mesh position={[0, 0.36, -depth * 0.26]}>
+        <mesh castShadow receiveShadow position={[0, 0.36, -depth * 0.26]}>
           <boxGeometry args={[width * 0.7, 0.72, depth * 0.18]} />
           <meshStandardMaterial color="#f4f4f1" roughness={0.4} />
         </mesh>
@@ -595,6 +597,8 @@ function FixtureMesh({
 
   return (
     <mesh
+      castShadow
+      receiveShadow
       position={[position.x, height / 2 + 0.02, position.z]}
       rotation={[0, rotation, 0]}
     >
@@ -638,7 +642,7 @@ function OpeningMesh({
 
   if (opening.kind === 'window') {
     return (
-      <mesh position={[position.x, 1.28, position.z]} rotation={[0, -wallAngle, 0]}>
+      <mesh castShadow position={[position.x, 1.28, position.z]} rotation={[0, -wallAngle, 0]}>
         <boxGeometry args={[width, 0.82, 0.035]} />
         <meshStandardMaterial color="#9fc8d4" transparent opacity={0.55} roughness={0.2} />
       </mesh>
@@ -647,11 +651,11 @@ function OpeningMesh({
 
   return (
     <group position={[position.x, 0.02, position.z]} rotation={[0, -wallAngle, 0]}>
-      <mesh position={[width * 0.23, 1.0, wallThickness * 1.1]}>
+      <mesh castShadow receiveShadow position={[width * 0.23, 1.0, wallThickness * 1.1]}>
         <boxGeometry args={[width * 0.46, 2.0, 0.035]} />
         <meshStandardMaterial color="#b7895b" roughness={0.58} />
       </mesh>
-      <mesh position={[0, 2.05, 0]}>
+      <mesh castShadow receiveShadow position={[0, 2.05, 0]}>
         <boxGeometry args={[width, 0.08, wallThickness * 1.2]} />
         <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
       </mesh>
@@ -678,9 +682,23 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
 
   return (
     <>
-      <ambientLight intensity={1.2} />
-      <hemisphereLight args={['#ffffff', '#c7bca8', 1.2]} />
-      <directionalLight position={[4, 8, 6]} intensity={1.4} />
+      <color attach="background" args={['#eef2ec']} />
+      <SoftShadows size={14} samples={8} focus={0.85} />
+      <ambientLight intensity={0.45} />
+      <hemisphereLight args={['#ffffff', '#c7bca8', 0.85]} />
+      <directionalLight
+        castShadow
+        position={[4, 8, 6]}
+        intensity={2.1}
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-near={1}
+        shadow-camera-far={28}
+        shadow-camera-left={-12}
+        shadow-camera-right={12}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
+      />
+      <Environment preset="apartment" environmentIntensity={0.45} />
       <group>
         {plan.spaces.map((space) => (
           <SpaceMesh key={space.id} space={space} scale={renderScale} center={center} />
@@ -707,6 +725,14 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
           <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
         ))}
       </group>
+      <ContactShadows
+        position={[0, 0.015, 0]}
+        opacity={0.32}
+        scale={18}
+        blur={2.6}
+        far={4.2}
+        resolution={512}
+      />
       <gridHelper args={[16, 16, '#c5ccc5', '#edf0ea']} position={[0, -0.01, 0]} />
       <CameraViewpoint viewpoint={viewpoint} />
       <OrbitControls makeDefault target={viewpoint.target} maxPolarAngle={Math.PI * 0.48} />
@@ -902,7 +928,16 @@ function App() {
             </button>
           ))}
         </div>
-        <Canvas camera={{ position: [5.5, 3.2, 7], fov: 52 }}>
+        <Canvas
+          shadows
+          dpr={[1, 2]}
+          gl={{ antialias: true, powerPreference: 'high-performance' }}
+          camera={{ position: [5.5, 3.2, 7], fov: 52 }}
+          onCreated={({ gl }) => {
+            gl.toneMapping = THREE.ACESFilmicToneMapping
+            gl.toneMappingExposure = 1.08
+          }}
+        >
           <PlanScene plan={activePlan} viewpoint={selectedViewpoint} />
         </Canvas>
       </section>
