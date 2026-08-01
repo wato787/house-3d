@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { OrbitControls, PointerLockControls } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
 import { generatePlanFromImage } from './gemini'
@@ -44,6 +44,8 @@ type HousePlan = {
   openings?: Opening[]
   fixtures: Fixture[]
 }
+
+type ViewMode = 'orbit' | 'walk'
 
 const samplePlan: HousePlan = {
   scale: 1000,
@@ -585,7 +587,81 @@ function OpeningMesh({
   )
 }
 
-function PlanScene({ plan }: { plan: HousePlan }) {
+function WalkCamera({ enabled }: { enabled: boolean }) {
+  const { camera } = useThree()
+  const pressedKeys = useMemo(() => new Set<string>(), [])
+
+  useEffect(() => {
+    if (!enabled) {
+      return
+    }
+
+    camera.position.set(0, 1.6, 5.2)
+    camera.rotation.set(0, 0, 0)
+  }, [camera, enabled])
+
+  useEffect(() => {
+    if (!enabled) {
+      pressedKeys.clear()
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      pressedKeys.add(event.key.toLowerCase())
+    }
+
+    function handleKeyUp(event: KeyboardEvent) {
+      pressedKeys.delete(event.key.toLowerCase())
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      pressedKeys.clear()
+    }
+  }, [enabled, pressedKeys])
+
+  useFrame((_, delta) => {
+    if (!enabled) {
+      return
+    }
+
+    const speed = 2.8 * delta
+    const forward = new THREE.Vector3()
+    camera.getWorldDirection(forward)
+    forward.y = 0
+    forward.normalize()
+
+    const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize()
+    const movement = new THREE.Vector3()
+
+    if (pressedKeys.has('w') || pressedKeys.has('arrowup')) {
+      movement.add(forward)
+    }
+    if (pressedKeys.has('s') || pressedKeys.has('arrowdown')) {
+      movement.sub(forward)
+    }
+    if (pressedKeys.has('a') || pressedKeys.has('arrowleft')) {
+      movement.sub(right)
+    }
+    if (pressedKeys.has('d') || pressedKeys.has('arrowright')) {
+      movement.add(right)
+    }
+
+    if (movement.lengthSq() > 0) {
+      movement.normalize().multiplyScalar(speed)
+      camera.position.add(movement)
+      camera.position.y = 1.6
+    }
+  })
+
+  return enabled ? <PointerLockControls makeDefault /> : null
+}
+
+function PlanScene({ plan, viewMode }: { plan: HousePlan; viewMode: ViewMode }) {
   const center = useMemo(() => getPlanCenter(plan), [plan])
   const renderScale = useMemo(() => getRenderScale(plan), [plan])
   const generatedWalls = useMemo(() => getSpaceWalls(plan.spaces), [plan.spaces])
@@ -623,7 +699,11 @@ function PlanScene({ plan }: { plan: HousePlan }) {
         ))}
       </group>
       <gridHelper args={[16, 16, '#c5ccc5', '#edf0ea']} position={[0, -0.01, 0]} />
-      <OrbitControls makeDefault target={[0, 1.1, 0]} maxPolarAngle={Math.PI * 0.48} />
+      {viewMode === 'orbit' ? (
+        <OrbitControls makeDefault target={[0, 1.1, 0]} maxPolarAngle={Math.PI * 0.48} />
+      ) : (
+        <WalkCamera enabled />
+      )}
     </>
   )
 }
@@ -633,6 +713,7 @@ function App() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('orbit')
   const [imagePreview, setImagePreview] = useState<{
     file: File
     name: string
@@ -795,8 +876,27 @@ function App() {
       </aside>
 
       <section className="viewer" aria-label="3D plan preview">
+        <div className="viewer-toolbar">
+          <button
+            type="button"
+            className={viewMode === 'orbit' ? 'viewer-mode-active' : ''}
+            onClick={() => setViewMode('orbit')}
+          >
+            俯瞰
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'walk' ? 'viewer-mode-active' : ''}
+            onClick={() => setViewMode('walk')}
+          >
+            内覧
+          </button>
+        </div>
+        {viewMode === 'walk' ? (
+          <div className="walk-hint">クリックして見回す / WASDで移動 / Escで解除</div>
+        ) : null}
         <Canvas camera={{ position: [5.5, 3.2, 7], fov: 52 }}>
-          <PlanScene plan={activePlan} />
+          <PlanScene plan={activePlan} viewMode={viewMode} />
         </Canvas>
       </section>
     </main>

@@ -253,9 +253,56 @@ textarea:focus {
 }
 
 .viewer {
+  position: relative;
   min-width: 0;
   min-height: 100svh;
   background: #e9eee8;
+}
+
+.viewer-toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(58, 70, 60, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 24px rgba(30, 38, 32, 0.12);
+}
+
+.viewer-toolbar button {
+  border: 0;
+  padding: 8px 13px;
+  color: #3b463e;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.viewer-toolbar button:hover {
+  background: rgba(47, 107, 70, 0.08);
+}
+
+.viewer-toolbar .viewer-mode-active {
+  color: #ffffff;
+  background: #2f6b46;
+}
+
+.walk-hint {
+  position: absolute;
+  z-index: 2;
+  right: 18px;
+  bottom: 18px;
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: #334039;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 24px rgba(30, 38, 32, 0.12);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 canvas {
