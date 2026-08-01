@@ -190,7 +190,7 @@ const samplePlan: HousePlan = {
       kind: 'stairs',
       position: [9750, 5200],
       size: [1500, 2200],
-      rotation: 90,
+      rotation: 0,
       color: '#d7c3a0',
     },
     {
