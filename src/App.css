@@ -43,12 +43,92 @@ h1 {
 .panel {
   display: flex;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #dbe1da;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.image-panel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dropzone {
+  display: grid;
+  min-height: 210px;
+  max-height: 320px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px dashed #a9b7ab;
+  border-radius: 8px;
+  background: #eef3ed;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.dropzone:hover,
+.dropzone-active {
+  border-color: #607865;
+  background: #e4ece3;
+}
+
+.dropzone img {
+  width: 100%;
+  height: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.dropzone-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #526157;
+  font-size: 13px;
+}
+
+.dropzone-empty strong {
+  color: #253229;
+  font-size: 15px;
+}
+
+.image-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #5d625b;
+  font-size: 12px;
+}
+
+.image-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-meta button {
+  flex: 0 0 auto;
+  border: 1px solid #cbd6ce;
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: #30362f;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.image-meta button:hover {
+  background: #f1f5ef;
 }
 
 .panel-header {

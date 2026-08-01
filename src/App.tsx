@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
+import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
 import './App.css'
 
@@ -329,6 +330,41 @@ function PlanScene({ plan }: { plan: HousePlan }) {
 
 function App() {
   const [jsonText, setJsonText] = useState(() => JSON.stringify(samplePlan, null, 2))
+  const [imagePreview, setImagePreview] = useState<{
+    name: string
+    url: string
+  } | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview.url)
+      }
+    }
+  }, [imagePreview])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
+    },
+    maxFiles: 1,
+    onDrop: ([file]) => {
+      if (!file) {
+        return
+      }
+
+      setImagePreview((currentPreview) => {
+        if (currentPreview) {
+          URL.revokeObjectURL(currentPreview.url)
+        }
+
+        return {
+          name: file.name,
+          url: URL.createObjectURL(file),
+        }
+      })
+    },
+  })
 
   const parsed = useMemo(() => {
     try {
@@ -357,6 +393,32 @@ function App() {
           <h1>Plan Preview</h1>
           <p className="lead">間取りJSONから、床・壁・設備の3D下書きを表示します。</p>
         </div>
+
+        <section className="image-panel">
+          <div
+            {...getRootProps({
+              className: `dropzone${isDragActive ? ' dropzone-active' : ''}`,
+            })}
+          >
+            <input {...getInputProps()} />
+            {imagePreview ? (
+              <img src={imagePreview.url} alt={imagePreview.name} />
+            ) : (
+              <div className="dropzone-empty">
+                <strong>Drop floor plan</strong>
+                <span>PNG, JPG, JPEG, WEBP</span>
+              </div>
+            )}
+          </div>
+          {imagePreview ? (
+            <div className="image-meta">
+              <span>{imagePreview.name}</span>
+              <button type="button" onClick={() => setImagePreview(null)}>
+                Clear
+              </button>
+            </div>
+          ) : null}
+        </section>
 
         <section className="panel">
           <div className="panel-header">
