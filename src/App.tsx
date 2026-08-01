@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, PointerLockControls } from '@react-three/drei'
+import { Canvas, useThree } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
 import { useDropzone } from 'react-dropzone'
 import * as THREE from 'three'
 import { generatePlanFromImage } from './gemini'
@@ -45,7 +45,12 @@ type HousePlan = {
   fixtures: Fixture[]
 }
 
-type ViewMode = 'orbit' | 'walk'
+type Viewpoint = {
+  id: string
+  label: string
+  target: THREE.Vector3
+  position: THREE.Vector3
+}
 
 const samplePlan: HousePlan = {
   scale: 1000,
@@ -283,6 +288,73 @@ function getRenderScale(plan: HousePlan) {
 
 function toScenePoint([x, y]: Point, scale: number, center: THREE.Vector2) {
   return new THREE.Vector3((x - center.x) / scale, 0, (y - center.y) / scale)
+}
+
+function getSpaceCenter(space: Space, scale: number, center: THREE.Vector2) {
+  const scenePoints = space.polygon.map((point) => toScenePoint(point, scale, center))
+  const sum = scenePoints.reduce((total, point) => total.add(point), new THREE.Vector3())
+  return sum.multiplyScalar(1 / scenePoints.length)
+}
+
+function getSpaceSize(space: Space, scale: number) {
+  const xs = space.polygon.map(([x]) => x)
+  const ys = space.polygon.map(([, y]) => y)
+  return {
+    width: (Math.max(...xs) - Math.min(...xs)) / scale,
+    depth: (Math.max(...ys) - Math.min(...ys)) / scale,
+  }
+}
+
+function findSpace(spaces: Space[], patterns: RegExp[]) {
+  return spaces.find((space) => patterns.some((pattern) => pattern.test(space.name)))
+}
+
+function createSpaceViewpoint(
+  id: string,
+  label: string,
+  space: Space | undefined,
+  scale: number,
+  center: THREE.Vector2,
+) {
+  if (!space) {
+    return null
+  }
+
+  const target = getSpaceCenter(space, scale, center)
+  const size = getSpaceSize(space, scale)
+  const distance = Math.max(size.width, size.depth, 2.4)
+
+  return {
+    id,
+    label,
+    target: new THREE.Vector3(target.x, 1.0, target.z),
+    position: new THREE.Vector3(target.x + distance * 0.55, 2.3, target.z + distance * 0.85),
+  }
+}
+
+function getViewpoints(plan: HousePlan, scale: number, center: THREE.Vector2) {
+  const bounds = getPlanBounds(plan)
+  const overallTarget = new THREE.Vector3(0, 1.1, 0)
+  const overallDistance = bounds
+    ? Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / scale
+    : 9
+
+  return [
+    {
+      id: 'overall',
+      label: '全体',
+      target: overallTarget,
+      position: new THREE.Vector3(
+        overallDistance * 0.42,
+        Math.max(overallDistance * 0.42, 4.2),
+        overallDistance * 0.58,
+      ),
+    },
+    createSpaceViewpoint('ldk', 'LDK', findSpace(plan.spaces, [/ldk/i, /リビング/, /living/i]), scale, center),
+    createSpaceViewpoint('entry', '玄関', findSpace(plan.spaces, [/玄関/, /entry/i]), scale, center),
+    createSpaceViewpoint('water', '水回り', findSpace(plan.spaces, [/洗面/, /脱衣/, /浴室/, /ub/i, /bath/i]), scale, center),
+    createSpaceViewpoint('stairs', '階段', findSpace(plan.spaces, [/階段/, /stairs/i]), scale, center),
+  ].filter((viewpoint): viewpoint is Viewpoint => Boolean(viewpoint))
 }
 
 function edgeKey(start: Point, end: Point) {
@@ -587,81 +659,18 @@ function OpeningMesh({
   )
 }
 
-function WalkCamera({ enabled }: { enabled: boolean }) {
+function CameraViewpoint({ viewpoint }: { viewpoint: Viewpoint }) {
   const { camera } = useThree()
-  const pressedKeys = useMemo(() => new Set<string>(), [])
 
   useEffect(() => {
-    if (!enabled) {
-      return
-    }
+    camera.position.copy(viewpoint.position)
+    camera.lookAt(viewpoint.target)
+  }, [camera, viewpoint])
 
-    camera.position.set(0, 1.6, 5.2)
-    camera.rotation.set(0, 0, 0)
-  }, [camera, enabled])
-
-  useEffect(() => {
-    if (!enabled) {
-      pressedKeys.clear()
-      return
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      pressedKeys.add(event.key.toLowerCase())
-    }
-
-    function handleKeyUp(event: KeyboardEvent) {
-      pressedKeys.delete(event.key.toLowerCase())
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-      pressedKeys.clear()
-    }
-  }, [enabled, pressedKeys])
-
-  useFrame((_, delta) => {
-    if (!enabled) {
-      return
-    }
-
-    const speed = 2.8 * delta
-    const forward = new THREE.Vector3()
-    camera.getWorldDirection(forward)
-    forward.y = 0
-    forward.normalize()
-
-    const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize()
-    const movement = new THREE.Vector3()
-
-    if (pressedKeys.has('w') || pressedKeys.has('arrowup')) {
-      movement.add(forward)
-    }
-    if (pressedKeys.has('s') || pressedKeys.has('arrowdown')) {
-      movement.sub(forward)
-    }
-    if (pressedKeys.has('a') || pressedKeys.has('arrowleft')) {
-      movement.sub(right)
-    }
-    if (pressedKeys.has('d') || pressedKeys.has('arrowright')) {
-      movement.add(right)
-    }
-
-    if (movement.lengthSq() > 0) {
-      movement.normalize().multiplyScalar(speed)
-      camera.position.add(movement)
-      camera.position.y = 1.6
-    }
-  })
-
-  return enabled ? <PointerLockControls makeDefault /> : null
+  return null
 }
 
-function PlanScene({ plan, viewMode }: { plan: HousePlan; viewMode: ViewMode }) {
+function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint }) {
   const center = useMemo(() => getPlanCenter(plan), [plan])
   const renderScale = useMemo(() => getRenderScale(plan), [plan])
   const generatedWalls = useMemo(() => getSpaceWalls(plan.spaces), [plan.spaces])
@@ -699,11 +708,8 @@ function PlanScene({ plan, viewMode }: { plan: HousePlan; viewMode: ViewMode }) 
         ))}
       </group>
       <gridHelper args={[16, 16, '#c5ccc5', '#edf0ea']} position={[0, -0.01, 0]} />
-      {viewMode === 'orbit' ? (
-        <OrbitControls makeDefault target={[0, 1.1, 0]} maxPolarAngle={Math.PI * 0.48} />
-      ) : (
-        <WalkCamera enabled />
-      )}
+      <CameraViewpoint viewpoint={viewpoint} />
+      <OrbitControls makeDefault target={viewpoint.target} maxPolarAngle={Math.PI * 0.48} />
     </>
   )
 }
@@ -713,7 +719,7 @@ function App() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>('orbit')
+  const [selectedViewpointId, setSelectedViewpointId] = useState('overall')
   const [imagePreview, setImagePreview] = useState<{
     file: File
     name: string
@@ -770,6 +776,14 @@ function App() {
   }, [jsonText])
 
   const activePlan = parsed.plan ?? samplePlan
+  const activeCenter = useMemo(() => getPlanCenter(activePlan), [activePlan])
+  const activeScale = useMemo(() => getRenderScale(activePlan), [activePlan])
+  const viewpoints = useMemo(
+    () => getViewpoints(activePlan, activeScale, activeCenter),
+    [activePlan, activeCenter, activeScale],
+  )
+  const selectedViewpoint =
+    viewpoints.find((viewpoint) => viewpoint.id === selectedViewpointId) ?? viewpoints[0]
   const canGenerate = Boolean(imagePreview) && !isGenerating
 
   async function handleCreatePreview() {
@@ -876,27 +890,20 @@ function App() {
       </aside>
 
       <section className="viewer" aria-label="3D plan preview">
-        <div className="viewer-toolbar">
-          <button
-            type="button"
-            className={viewMode === 'orbit' ? 'viewer-mode-active' : ''}
-            onClick={() => setViewMode('orbit')}
-          >
-            俯瞰
-          </button>
-          <button
-            type="button"
-            className={viewMode === 'walk' ? 'viewer-mode-active' : ''}
-            onClick={() => setViewMode('walk')}
-          >
-            内覧
-          </button>
+        <div className="viewpoint-bar">
+          {viewpoints.map((viewpoint) => (
+            <button
+              key={viewpoint.id}
+              type="button"
+              className={selectedViewpoint.id === viewpoint.id ? 'viewpoint-active' : ''}
+              onClick={() => setSelectedViewpointId(viewpoint.id)}
+            >
+              {viewpoint.label}
+            </button>
+          ))}
         </div>
-        {viewMode === 'walk' ? (
-          <div className="walk-hint">クリックして見回す / WASDで移動 / Escで解除</div>
-        ) : null}
         <Canvas camera={{ position: [5.5, 3.2, 7], fov: 52 }}>
-          <PlanScene plan={activePlan} viewMode={viewMode} />
+          <PlanScene plan={activePlan} viewpoint={selectedViewpoint} />
         </Canvas>
       </section>
     </main>

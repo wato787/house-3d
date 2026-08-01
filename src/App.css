@@ -259,50 +259,42 @@ textarea:focus {
   background: #e9eee8;
 }
 
-.viewer-toolbar {
+.viewpoint-bar {
   position: absolute;
   z-index: 2;
-  top: 18px;
+  right: 18px;
+  bottom: 18px;
   left: 18px;
   display: flex;
-  overflow: hidden;
+  gap: 8px;
+  overflow-x: auto;
   border: 1px solid rgba(58, 70, 60, 0.18);
   border-radius: 8px;
+  padding: 8px;
   background: rgba(255, 255, 255, 0.88);
   box-shadow: 0 8px 24px rgba(30, 38, 32, 0.12);
+  -webkit-overflow-scrolling: touch;
 }
 
-.viewer-toolbar button {
+.viewpoint-bar button {
+  flex: 0 0 auto;
   border: 0;
-  padding: 8px 13px;
+  border-radius: 6px;
+  padding: 9px 14px;
   color: #3b463e;
-  background: transparent;
+  background: #eef3ed;
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
 }
 
-.viewer-toolbar button:hover {
+.viewpoint-bar button:hover {
   background: rgba(47, 107, 70, 0.08);
 }
 
-.viewer-toolbar .viewer-mode-active {
+.viewpoint-bar .viewpoint-active {
   color: #ffffff;
   background: #2f6b46;
-}
-
-.walk-hint {
-  position: absolute;
-  z-index: 2;
-  right: 18px;
-  bottom: 18px;
-  border-radius: 8px;
-  padding: 9px 12px;
-  color: #334039;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 8px 24px rgba(30, 38, 32, 0.12);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 canvas {
