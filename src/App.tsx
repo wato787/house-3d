@@ -214,7 +214,6 @@ const samplePlan: HousePlan = {
 
 const wallHeight = 1.2
 const wallThickness = 0.12
-const doorwayWidthMeters = 0.9
 const fallbackBuildingWidthMeters = 13.2
 const openingSnapDistanceMeters = 0.55
 const subtleTextureSize = 256
@@ -346,6 +345,48 @@ function isFixtureAllowedInPlan(fixture: Fixture, spaces: Space[]) {
     .some((space) => isPointInPolygon(fixture.position, space.polygon))
 }
 
+function normalizeOpenings(plan: HousePlan) {
+  const walls = getSpaceWalls(plan.spaces)
+  const scale = getRenderScale(plan)
+  const assigned = getOpeningsByWall(walls, plan.openings ?? [], scale)
+
+  return Array.from(assigned.entries()).flatMap(([wallId, openings]) => {
+    const wall = walls.find((candidate) => candidate.id === wallId)
+
+    if (!wall) {
+      return []
+    }
+
+    const accepted: Opening[] = []
+
+    openings
+      .map((opening) => ({
+        opening,
+        projection: getOpeningProjection(wall, opening, scale),
+      }))
+      .filter((match): match is { opening: Opening; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
+        Boolean(match.projection),
+      )
+      .sort((a, b) => a.projection.center - b.projection.center)
+      .forEach(({ opening, projection }) => {
+        const hasNearbyOpening = accepted.some((acceptedOpening) => {
+          const acceptedProjection = getOpeningProjection(wall, acceptedOpening, scale)
+          return (
+            acceptedProjection &&
+            acceptedOpening.kind === opening.kind &&
+            Math.abs(acceptedProjection.center - projection.center) < 0.35
+          )
+        })
+
+        if (!hasNearbyOpening) {
+          accepted.push(opening)
+        }
+      })
+
+    return accepted
+  })
+}
+
 function normalizePlan(plan: HousePlan): HousePlan {
   const spaces = plan.spaces
 
@@ -355,7 +396,7 @@ function normalizePlan(plan: HousePlan): HousePlan {
       (area) => !doesOutdoorAreaOverlapSpaces(area, spaces),
     ),
     walls: plan.walls ?? [],
-    openings: plan.openings ?? [],
+    openings: normalizeOpenings(plan),
     fixtures: (plan.fixtures ?? []).filter((fixture) => isFixtureAllowedInPlan(fixture, spaces)),
   }
 }
@@ -508,12 +549,7 @@ function getWallSegments(wall: Wall & { hasOpening?: boolean }, openings: Openin
     .map((opening) => getOpeningProjection(wall, opening, scale))
     .filter((opening): opening is NonNullable<typeof opening> => Boolean(opening))
 
-  const fallbackOpenings =
-    explicitOpenings.length === 0 && wall.hasOpening
-      ? [{ center: wallLength / 2, width: doorwayWidthMeters, opening: null }]
-      : []
-
-  const sortedOpenings = [...explicitOpenings, ...fallbackOpenings]
+  const sortedOpenings = explicitOpenings
     .map((projection) => ({
       ...projection,
       start: Math.max(0, projection.center - projection.width / 2),
