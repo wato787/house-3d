@@ -42,7 +42,7 @@ type HousePlan = {
   spaces: Space[]
   walls?: Wall[]
   openings?: Opening[]
-  fixtures: Fixture[]
+  fixtures?: Fixture[]
 }
 
 type Viewpoint = {
@@ -203,7 +203,7 @@ function isPlan(value: unknown): value is HousePlan {
     Array.isArray(candidate.spaces) &&
     (candidate.walls === undefined || Array.isArray(candidate.walls)) &&
     (candidate.openings === undefined || Array.isArray(candidate.openings)) &&
-    Array.isArray(candidate.fixtures) &&
+    (candidate.fixtures === undefined || Array.isArray(candidate.fixtures)) &&
     candidate.spaces.every(
       (space) =>
         typeof space.id === 'string' &&
@@ -223,7 +223,7 @@ function isPlan(value: unknown): value is HousePlan {
         isPoint(opening.position) &&
         typeof opening.width === 'number',
     ) &&
-    candidate.fixtures.every(
+    (candidate.fixtures ?? []).every(
       (fixture) =>
         typeof fixture.id === 'string' &&
         typeof fixture.kind === 'string' &&
@@ -235,6 +235,15 @@ function isPlan(value: unknown): value is HousePlan {
         typeof fixture.rotation === 'number',
     )
   )
+}
+
+function normalizePlan(plan: HousePlan): HousePlan {
+  return {
+    ...plan,
+    walls: plan.walls ?? [],
+    openings: plan.openings ?? [],
+    fixtures: plan.fixtures ?? [],
+  }
 }
 
 function getStructuralPoints(plan: HousePlan) {
@@ -751,7 +760,7 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
             center={center}
           />
         ))}
-        {plan.fixtures.map((fixture) => (
+        {(plan.fixtures ?? []).map((fixture) => (
           <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
         ))}
       </group>
@@ -819,13 +828,12 @@ function App() {
       const parsedJson: unknown = JSON.parse(jsonText)
       if (!isPlan(parsedJson)) {
         return {
-          error:
-            'JSON shape is invalid. Required: scale, spaces, walls, fixtures with numeric coordinates.',
+          error: 'JSON shape is invalid. Required: scale and spaces with numeric coordinates.',
           plan: null,
         }
       }
 
-      return { error: null, plan: parsedJson }
+      return { error: null, plan: normalizePlan(parsedJson) }
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Invalid JSON', plan: null }
     }
@@ -851,8 +859,13 @@ function App() {
 
     try {
       const generatedJson = await generatePlanFromImage(imagePreview.file)
-      JSON.parse(generatedJson)
-      setJsonText(generatedJson)
+      const parsedJson: unknown = JSON.parse(generatedJson)
+
+      if (!isPlan(parsedJson)) {
+        throw new Error('AIの返答形式を3Dプレビューに変換できませんでした。')
+      }
+
+      setJsonText(JSON.stringify(normalizePlan(parsedJson), null, 2))
       setIsDetailsOpen(false)
     } catch (error) {
       setGenerationError(
