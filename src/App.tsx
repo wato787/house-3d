@@ -465,6 +465,7 @@ function getOpeningProjection(wall: Wall, opening: Opening, scale: number) {
     opening,
     center: clampedDistance / scale,
     width: Math.max(opening.width / scale, opening.kind === 'door' ? 0.75 : 0.9),
+    distanceFromWallMeters,
   }
 }
 
@@ -711,6 +712,72 @@ function WallMesh({
   )
 }
 
+function WindowMesh({
+  opening,
+  walls,
+  scale,
+  center,
+}: {
+  opening: Opening
+  walls: Array<Wall & { hasOpening?: boolean }>
+  scale: number
+  center: THREE.Vector2
+}) {
+  const matchedWall = walls
+    .map((wall) => ({
+      wall,
+      projection: getOpeningProjection(wall, opening, scale),
+    }))
+    .filter((match): match is { wall: Wall & { hasOpening?: boolean }; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
+      Boolean(match.projection),
+    )
+    .sort((a, b) => a.projection.distanceFromWallMeters - b.projection.distanceFromWallMeters)[0]
+
+  if (!matchedWall) {
+    return null
+  }
+
+  const start = toScenePoint(matchedWall.wall.start, scale, center)
+  const end = toScenePoint(matchedWall.wall.end, scale, center)
+  const wallDirection = end.clone().sub(start).normalize()
+  const wallAngle = Math.atan2(end.z - start.z, end.x - start.x)
+  const position = start.clone().add(wallDirection.multiplyScalar(matchedWall.projection.center))
+  const width = Math.max(matchedWall.projection.width - wallThickness * 0.2, 0.4)
+  const glassHeight = wallHeight * 0.92
+  const frameThickness = 0.035
+
+  return (
+    <group position={[position.x, glassHeight / 2, position.z]} rotation={[0, -wallAngle, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[width, glassHeight, wallThickness * 0.42]} />
+        <meshStandardMaterial
+          color="#b9d7df"
+          transparent
+          opacity={0.48}
+          roughness={0.18}
+          metalness={0.02}
+        />
+      </mesh>
+      <mesh castShadow receiveShadow position={[-width / 2, 0, 0]}>
+        <boxGeometry args={[frameThickness, glassHeight, wallThickness * 0.5]} />
+        <meshStandardMaterial color="#f5f2eb" roughness={0.78} />
+      </mesh>
+      <mesh castShadow receiveShadow position={[width / 2, 0, 0]}>
+        <boxGeometry args={[frameThickness, glassHeight, wallThickness * 0.5]} />
+        <meshStandardMaterial color="#f5f2eb" roughness={0.78} />
+      </mesh>
+      <mesh castShadow receiveShadow position={[0, glassHeight / 2, 0]}>
+        <boxGeometry args={[width, frameThickness, wallThickness * 0.5]} />
+        <meshStandardMaterial color="#f5f2eb" roughness={0.78} />
+      </mesh>
+      <mesh castShadow receiveShadow position={[0, -glassHeight / 2, 0]}>
+        <boxGeometry args={[width, frameThickness, wallThickness * 0.5]} />
+        <meshStandardMaterial color="#f5f2eb" roughness={0.78} />
+      </mesh>
+    </group>
+  )
+}
+
 function FixtureMesh({
   fixture,
   scale,
@@ -844,6 +911,17 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
             openings={openings}
           />
         ))}
+        {openings
+          .filter((opening) => opening.kind === 'window')
+          .map((opening) => (
+            <WindowMesh
+              key={opening.id}
+              opening={opening}
+              walls={generatedWalls}
+              scale={renderScale}
+              center={center}
+            />
+          ))}
         {(plan.fixtures ?? []).map((fixture) => (
           <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
         ))}
