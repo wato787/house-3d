@@ -21,6 +21,13 @@ type Wall = {
   end: Point
 }
 
+type Opening = {
+  id: string
+  kind: 'door' | 'window'
+  position: Point
+  width: number
+}
+
 type Fixture = {
   id: string
   kind: string
@@ -34,6 +41,7 @@ type HousePlan = {
   scale: number
   spaces: Space[]
   walls?: Wall[]
+  openings?: Opening[]
   fixtures: Fixture[]
 }
 
@@ -113,6 +121,11 @@ const samplePlan: HousePlan = {
     { id: 'w12', start: [5200, 3900], end: [5200, 6500] },
     { id: 'w13', start: [9000, 2700], end: [13200, 2700] },
   ],
+  openings: [
+    { id: 'door-living-pantry', kind: 'door', position: [7300, 3100], width: 900 },
+    { id: 'window-living-south', kind: 'window', position: [3000, 6500], width: 1800 },
+    { id: 'window-dining-west', kind: 'window', position: [0, 2100], width: 1800 },
+  ],
   fixtures: [
     {
       id: 'kitchen',
@@ -161,6 +174,7 @@ const wallHeight = 2.4
 const wallThickness = 0.12
 const doorwayWidthMeters = 0.9
 const fallbackBuildingWidthMeters = 13.2
+const openingSnapDistanceMeters = 0.55
 
 function isPoint(value: unknown): value is Point {
   return (
@@ -181,6 +195,7 @@ function isPlan(value: unknown): value is HousePlan {
     candidate.scale > 0 &&
     Array.isArray(candidate.spaces) &&
     (candidate.walls === undefined || Array.isArray(candidate.walls)) &&
+    (candidate.openings === undefined || Array.isArray(candidate.openings)) &&
     Array.isArray(candidate.fixtures) &&
     candidate.spaces.every(
       (space) =>
@@ -193,6 +208,13 @@ function isPlan(value: unknown): value is HousePlan {
     ) &&
     (candidate.walls ?? []).every(
       (wall) => typeof wall.id === 'string' && isPoint(wall.start) && isPoint(wall.end),
+    ) &&
+    (candidate.openings ?? []).every(
+      (opening) =>
+        typeof opening.id === 'string' &&
+        (opening.kind === 'door' || opening.kind === 'window') &&
+        isPoint(opening.position) &&
+        typeof opening.width === 'number',
     ) &&
     candidate.fixtures.every(
       (fixture) =>
@@ -299,6 +321,72 @@ function getSpaceWalls(spaces: Space[]) {
   }))
 }
 
+function getOpeningProjection(wall: Wall, opening: Opening, scale: number) {
+  const start = new THREE.Vector2(wall.start[0], wall.start[1])
+  const end = new THREE.Vector2(wall.end[0], wall.end[1])
+  const point = new THREE.Vector2(opening.position[0], opening.position[1])
+  const wallVector = end.clone().sub(start)
+  const wallLength = wallVector.length()
+
+  if (wallLength === 0) {
+    return null
+  }
+
+  const direction = wallVector.clone().normalize()
+  const projectedDistance = point.clone().sub(start).dot(direction)
+  const clampedDistance = THREE.MathUtils.clamp(projectedDistance, 0, wallLength)
+  const closestPoint = start.clone().add(direction.multiplyScalar(clampedDistance))
+  const distanceFromWallMeters = closestPoint.distanceTo(point) / scale
+
+  if (distanceFromWallMeters > openingSnapDistanceMeters) {
+    return null
+  }
+
+  return {
+    opening,
+    center: clampedDistance / scale,
+    width: Math.max(opening.width / scale, opening.kind === 'door' ? 0.75 : 0.9),
+  }
+}
+
+function getWallSegments(wall: Wall & { hasOpening?: boolean }, openings: Opening[], scale: number) {
+  const start = new THREE.Vector2(wall.start[0], wall.start[1])
+  const end = new THREE.Vector2(wall.end[0], wall.end[1])
+  const wallLength = start.distanceTo(end) / scale
+  const explicitOpenings = openings
+    .map((opening) => getOpeningProjection(wall, opening, scale))
+    .filter((opening): opening is NonNullable<typeof opening> => Boolean(opening))
+
+  const fallbackOpenings =
+    explicitOpenings.length === 0 && wall.hasOpening
+      ? [{ center: wallLength / 2, width: doorwayWidthMeters, opening: null }]
+      : []
+
+  const sortedOpenings = [...explicitOpenings, ...fallbackOpenings]
+    .map((projection) => ({
+      ...projection,
+      start: Math.max(0, projection.center - projection.width / 2),
+      end: Math.min(wallLength, projection.center + projection.width / 2),
+    }))
+    .sort((a, b) => a.start - b.start)
+
+  const segments: Array<{ start: number; end: number }> = []
+  let cursor = 0
+
+  sortedOpenings.forEach((opening) => {
+    if (opening.start > cursor) {
+      segments.push({ start: cursor, end: opening.start })
+    }
+    cursor = Math.max(cursor, opening.end)
+  })
+
+  if (cursor < wallLength) {
+    segments.push({ start: cursor, end: wallLength })
+  }
+
+  return segments.filter((segment) => segment.end - segment.start > 0.08)
+}
+
 function SpaceMesh({
   space,
   scale,
@@ -331,25 +419,28 @@ function WallMesh({
   wall,
   scale,
   center,
+  openings,
 }: {
   wall: Wall & { hasOpening?: boolean }
   scale: number
   center: THREE.Vector2
+  openings: Opening[]
 }) {
   const start = toScenePoint(wall.start, scale, center)
   const end = toScenePoint(wall.end, scale, center)
-  const length = start.distanceTo(end)
   const angle = Math.atan2(end.z - start.z, end.x - start.x)
+  const direction = end.clone().sub(start).normalize()
+  const segments = getWallSegments(wall, openings, scale)
 
-  if (wall.hasOpening && length > doorwayWidthMeters * 1.8) {
-    const segmentLength = (length - doorwayWidthMeters) / 2
-    const direction = end.clone().sub(start).normalize()
-    const firstMidpoint = start.clone().add(direction.clone().multiplyScalar(segmentLength / 2))
-    const secondMidpoint = end.clone().add(direction.clone().multiplyScalar(-segmentLength / 2))
+  return (
+    <>
+      {segments.map((segment, index) => {
+        const segmentLength = segment.end - segment.start
+        const midpoint = start
+          .clone()
+          .add(direction.clone().multiplyScalar(segment.start + segmentLength / 2))
 
-    return (
-      <>
-        {[firstMidpoint, secondMidpoint].map((midpoint, index) => (
+        return (
           <mesh
             key={`${wall.id}-${index}`}
             position={[midpoint.x, wallHeight / 2, midpoint.z]}
@@ -358,18 +449,9 @@ function WallMesh({
             <boxGeometry args={[segmentLength, wallHeight, wallThickness]} />
             <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
           </mesh>
-        ))}
-      </>
-    )
-  }
-
-  const midpoint = start.clone().add(end).multiplyScalar(0.5)
-
-  return (
-    <mesh position={[midpoint.x, wallHeight / 2, midpoint.z]} rotation={[0, -angle, 0]}>
-      <boxGeometry args={[length, wallHeight, wallThickness]} />
-      <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
-    </mesh>
+        )
+      })}
+    </>
   )
 }
 
@@ -448,10 +530,66 @@ function FixtureMesh({
   )
 }
 
+function OpeningMesh({
+  opening,
+  walls,
+  scale,
+  center,
+}: {
+  opening: Opening
+  walls: Array<Wall & { hasOpening?: boolean }>
+  scale: number
+  center: THREE.Vector2
+}) {
+  const matchedWall = walls
+    .map((wall) => ({
+      wall,
+      projection: getOpeningProjection(wall, opening, scale),
+    }))
+    .filter((match): match is { wall: Wall & { hasOpening?: boolean }; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
+      Boolean(match.projection),
+    )
+    .sort((a, b) => a.projection.center - b.projection.center)[0]
+
+  if (!matchedWall) {
+    return null
+  }
+
+  const start = toScenePoint(matchedWall.wall.start, scale, center)
+  const end = toScenePoint(matchedWall.wall.end, scale, center)
+  const wallDirection = end.clone().sub(start).normalize()
+  const wallAngle = Math.atan2(end.z - start.z, end.x - start.x)
+  const position = start.clone().add(wallDirection.multiplyScalar(matchedWall.projection.center))
+  const width = matchedWall.projection.width
+
+  if (opening.kind === 'window') {
+    return (
+      <mesh position={[position.x, 1.28, position.z]} rotation={[0, -wallAngle, 0]}>
+        <boxGeometry args={[width, 0.82, 0.035]} />
+        <meshStandardMaterial color="#9fc8d4" transparent opacity={0.55} roughness={0.2} />
+      </mesh>
+    )
+  }
+
+  return (
+    <group position={[position.x, 0.02, position.z]} rotation={[0, -wallAngle, 0]}>
+      <mesh position={[width * 0.23, 1.0, wallThickness * 1.1]}>
+        <boxGeometry args={[width * 0.46, 2.0, 0.035]} />
+        <meshStandardMaterial color="#b7895b" roughness={0.58} />
+      </mesh>
+      <mesh position={[0, 2.05, 0]}>
+        <boxGeometry args={[width, 0.08, wallThickness * 1.2]} />
+        <meshStandardMaterial color="#f7f4ec" roughness={0.82} />
+      </mesh>
+    </group>
+  )
+}
+
 function PlanScene({ plan }: { plan: HousePlan }) {
   const center = useMemo(() => getPlanCenter(plan), [plan])
   const renderScale = useMemo(() => getRenderScale(plan), [plan])
   const generatedWalls = useMemo(() => getSpaceWalls(plan.spaces), [plan.spaces])
+  const openings = plan.openings ?? []
 
   return (
     <>
@@ -463,7 +601,22 @@ function PlanScene({ plan }: { plan: HousePlan }) {
           <SpaceMesh key={space.id} space={space} scale={renderScale} center={center} />
         ))}
         {generatedWalls.map((wall) => (
-          <WallMesh key={wall.id} wall={wall} scale={renderScale} center={center} />
+          <WallMesh
+            key={wall.id}
+            wall={wall}
+            scale={renderScale}
+            center={center}
+            openings={openings}
+          />
+        ))}
+        {openings.map((opening) => (
+          <OpeningMesh
+            key={opening.id}
+            opening={opening}
+            walls={generatedWalls}
+            scale={renderScale}
+            center={center}
+          />
         ))}
         {plan.fixtures.map((fixture) => (
           <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
