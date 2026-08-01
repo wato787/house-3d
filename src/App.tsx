@@ -321,7 +321,7 @@ function doesOutdoorAreaOverlapSpaces(area: OutdoorArea, spaces: Space[]) {
 }
 
 function isSupportedFixture(fixture: Fixture) {
-  return /kitchen|bath|bathtub|toilet|sink|washbasin|basin|stairs/i.test(fixture.kind)
+  return /kitchen|bath|bathtub|toilet|sink|washbasin|basin|stairs|sofa|dining|table|tv|television/i.test(fixture.kind)
 }
 
 function normalizePlan(plan: HousePlan): HousePlan {
@@ -897,6 +897,58 @@ function FixtureMesh({
         <RoundedBox receiveShadow args={[width * 0.86, 0.025, depth * 0.92]} radius={0.02} smoothness={2} position={[0, stepRise * stepCount + 0.01, 0]}>
           <meshStandardMaterial color="#b8955e" roughness={0.62} />
         </RoundedBox>
+      </group>
+    )
+  }
+
+  if (/sofa/i.test(fixture.kind)) {
+    return (
+      <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
+        <RoundedBox castShadow receiveShadow args={[width, 0.32, depth]} radius={0.09} smoothness={6} position={[0, 0.16, 0]}>
+          <meshStandardMaterial color={fixture.color || '#cfc9bf'} roughness={0.86} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width, 0.58, depth * 0.18]} radius={0.07} smoothness={6} position={[0, 0.34, -depth * 0.42]}>
+          <meshStandardMaterial color="#bdb5aa" roughness={0.9} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width * 0.14, 0.42, depth * 0.86]} radius={0.06} smoothness={5} position={[-width * 0.46, 0.28, 0]}>
+          <meshStandardMaterial color="#beb6ab" roughness={0.88} />
+        </RoundedBox>
+        <RoundedBox castShadow receiveShadow args={[width * 0.14, 0.42, depth * 0.86]} radius={0.06} smoothness={5} position={[width * 0.46, 0.28, 0]}>
+          <meshStandardMaterial color="#beb6ab" roughness={0.88} />
+        </RoundedBox>
+      </group>
+    )
+  }
+
+  if (/tv|television/i.test(fixture.kind)) {
+    return (
+      <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
+        <RoundedBox castShadow receiveShadow args={[width, 0.18, depth]} radius={0.025} smoothness={3} position={[0, 0.09, 0]}>
+          <meshStandardMaterial color="#8d725d" roughness={0.62} />
+        </RoundedBox>
+        <RoundedBox castShadow args={[width * 0.82, 0.45, 0.035]} radius={0.018} smoothness={3} position={[0, 0.45, -depth * 0.25]}>
+          <meshStandardMaterial color="#1f2223" roughness={0.38} />
+        </RoundedBox>
+      </group>
+    )
+  }
+
+  if (/dining|table/i.test(fixture.kind)) {
+    return (
+      <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
+        <RoundedBox castShadow receiveShadow args={[width, 0.08, depth]} radius={0.05} smoothness={5} position={[0, 0.58, 0]}>
+          <meshStandardMaterial color={fixture.color || '#9f6b48'} roughness={0.68} />
+        </RoundedBox>
+        {[
+          [-width * 0.38, -depth * 0.35],
+          [width * 0.38, -depth * 0.35],
+          [-width * 0.38, depth * 0.35],
+          [width * 0.38, depth * 0.35],
+        ].map(([x, z], index) => (
+          <RoundedBox key={`${fixture.id}-leg-${index}`} castShadow receiveShadow args={[0.06, 0.55, 0.06]} radius={0.018} smoothness={3} position={[x, 0.28, z]}>
+            <meshStandardMaterial color="#72513b" roughness={0.72} />
+          </RoundedBox>
+        ))}
       </group>
     )
   }
