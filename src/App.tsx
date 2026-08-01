@@ -894,7 +894,7 @@ function FixtureMesh({
   if (fixture.kind === 'stairs') {
     const stepCount = 12
     const stepDepth = depth / stepCount
-    const stepRise = 0.075
+    const stepRise = 0.06
 
     return (
       <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
@@ -916,9 +916,6 @@ function FixtureMesh({
             </RoundedBox>
           )
         })}
-        <RoundedBox receiveShadow args={[width * 0.86, 0.025, depth * 0.92]} radius={0.02} smoothness={2} position={[0, stepRise * stepCount + 0.01, 0]}>
-          <meshStandardMaterial color="#b8955e" roughness={0.62} />
-        </RoundedBox>
       </group>
     )
   }
