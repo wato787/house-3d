@@ -324,6 +324,28 @@ function isSupportedFixture(fixture: Fixture) {
   return /kitchen|bath|bathtub|toilet|sink|washbasin|basin|stairs|sofa|dining|table|tv|television/i.test(fixture.kind)
 }
 
+function isLivingFurniture(fixture: Fixture) {
+  return /sofa|dining|table|tv|television/i.test(fixture.kind)
+}
+
+function isLivingSpace(space: Space) {
+  return /ldk|living|dining|リビング|ダイニング/i.test(space.name)
+}
+
+function isFixtureAllowedInPlan(fixture: Fixture, spaces: Space[]) {
+  if (!isSupportedFixture(fixture)) {
+    return false
+  }
+
+  if (!isLivingFurniture(fixture)) {
+    return true
+  }
+
+  return spaces
+    .filter(isLivingSpace)
+    .some((space) => isPointInPolygon(fixture.position, space.polygon))
+}
+
 function normalizePlan(plan: HousePlan): HousePlan {
   const spaces = plan.spaces
 
@@ -334,7 +356,7 @@ function normalizePlan(plan: HousePlan): HousePlan {
     ),
     walls: plan.walls ?? [],
     openings: plan.openings ?? [],
-    fixtures: (plan.fixtures ?? []).filter(isSupportedFixture),
+    fixtures: (plan.fixtures ?? []).filter((fixture) => isFixtureAllowedInPlan(fixture, spaces)),
   }
 }
 
@@ -934,9 +956,13 @@ function FixtureMesh({
   }
 
   if (/dining|table/i.test(fixture.kind)) {
+    const tabletopHeight = 0.38
+    const tabletopThickness = 0.065
+    const legHeight = tabletopHeight - tabletopThickness / 2
+
     return (
       <group position={[position.x, 0.045, position.z]} rotation={[0, rotation, 0]}>
-        <RoundedBox castShadow receiveShadow args={[width, 0.08, depth]} radius={0.05} smoothness={5} position={[0, 0.58, 0]}>
+        <RoundedBox castShadow receiveShadow args={[width, tabletopThickness, depth]} radius={0.045} smoothness={5} position={[0, tabletopHeight, 0]}>
           <meshStandardMaterial color={fixture.color || '#9f6b48'} roughness={0.68} />
         </RoundedBox>
         {[
@@ -945,7 +971,7 @@ function FixtureMesh({
           [-width * 0.38, depth * 0.35],
           [width * 0.38, depth * 0.35],
         ].map(([x, z], index) => (
-          <RoundedBox key={`${fixture.id}-leg-${index}`} castShadow receiveShadow args={[0.06, 0.55, 0.06]} radius={0.018} smoothness={3} position={[x, 0.28, z]}>
+          <RoundedBox key={`${fixture.id}-leg-${index}`} castShadow receiveShadow args={[0.045, legHeight, 0.045]} radius={0.014} smoothness={3} position={[x, legHeight / 2, z]}>
             <meshStandardMaterial color="#72513b" roughness={0.72} />
           </RoundedBox>
         ))}
