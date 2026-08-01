@@ -204,7 +204,7 @@ const samplePlan: HousePlan = {
   ],
 }
 
-const wallHeight = 2.4
+const wallHeight = 1.2
 const wallThickness = 0.12
 const doorwayWidthMeters = 0.9
 const fallbackBuildingWidthMeters = 13.2
@@ -776,8 +776,8 @@ function OpeningMesh({
 
   if (opening.kind === 'window') {
     return (
-      <mesh castShadow position={[position.x, 1.28, position.z]} rotation={[0, -wallAngle, 0]}>
-        <boxGeometry args={[width, 0.82, 0.035]} />
+      <mesh castShadow position={[position.x, 0.72, position.z]} rotation={[0, -wallAngle, 0]}>
+        <boxGeometry args={[width, 0.42, 0.035]} />
         <meshStandardMaterial color="#9fc8d4" transparent opacity={0.55} roughness={0.2} />
       </mesh>
     )
