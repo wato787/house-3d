@@ -53,8 +53,6 @@ type HousePlan = {
 }
 
 type Viewpoint = {
-  id: string
-  label: string
   target: THREE.Vector3
   position: THREE.Vector3
 }
@@ -344,25 +342,21 @@ function toScenePoint([x, y]: Point, scale: number, center: THREE.Vector2) {
   return new THREE.Vector3((x - center.x) / scale, 0, (y - center.y) / scale)
 }
 
-function getViewpoints(plan: HousePlan, scale: number) {
+function getOverallViewpoint(plan: HousePlan, scale: number) {
   const bounds = getPlanBounds(plan)
   const overallTarget = new THREE.Vector3(0, 1.1, 0)
   const overallDistance = bounds
     ? Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / scale
     : 9
 
-  return [
-    {
-      id: 'overall',
-      label: '全体',
-      target: overallTarget,
-      position: new THREE.Vector3(
-        overallDistance * 0.42,
-        Math.max(overallDistance * 0.42, 4.2),
-        overallDistance * 0.58,
-      ),
-    },
-  ]
+  return {
+    target: overallTarget,
+    position: new THREE.Vector3(
+      overallDistance * 0.42,
+      Math.max(overallDistance * 0.42, 4.2),
+      overallDistance * 0.58,
+    ),
+  }
 }
 
 function edgeKey(start: Point, end: Point) {
@@ -878,7 +872,6 @@ function App() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState<string | null>(null)
-  const [selectedViewpointId, setSelectedViewpointId] = useState('overall')
   const [imagePreview, setImagePreview] = useState<{
     file: File
     name: string
@@ -935,12 +928,10 @@ function App() {
 
   const activePlan = parsed.plan ?? samplePlan
   const activeScale = useMemo(() => getRenderScale(activePlan), [activePlan])
-  const viewpoints = useMemo(
-    () => getViewpoints(activePlan, activeScale),
+  const selectedViewpoint = useMemo(
+    () => getOverallViewpoint(activePlan, activeScale),
     [activePlan, activeScale],
   )
-  const selectedViewpoint =
-    viewpoints.find((viewpoint) => viewpoint.id === selectedViewpointId) ?? viewpoints[0]
   const canGenerate = Boolean(imagePreview) && !isGenerating
 
   async function handleCreatePreview() {
@@ -1052,18 +1043,6 @@ function App() {
       </aside>
 
       <section className="viewer" aria-label="3D plan preview">
-        <div className="viewpoint-bar">
-          {viewpoints.map((viewpoint) => (
-            <button
-              key={viewpoint.id}
-              type="button"
-              className={selectedViewpoint.id === viewpoint.id ? 'viewpoint-active' : ''}
-              onClick={() => setSelectedViewpointId(viewpoint.id)}
-            >
-              {viewpoint.label}
-            </button>
-          ))}
-        </div>
         <Canvas
           shadows
           dpr={[1, 2]}
