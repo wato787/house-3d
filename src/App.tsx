@@ -1011,8 +1011,20 @@ function App() {
           disabled={!canGenerate}
           onClick={handleCreatePreview}
         >
-          {isGenerating ? '作成中...' : '3Dプレビューを作成'}
+          {isGenerating ? (
+            <span className="action-loading">
+              <span className="spinner" />
+              画像を解析中
+            </span>
+          ) : (
+            '3Dプレビューを作成'
+          )}
         </button>
+        {isGenerating ? (
+          <div className="generation-progress">
+            <span />
+          </div>
+        ) : null}
         {generationError ? <p className="generation-error">{generationError}</p> : null}
 
         <section className="panel">
@@ -1046,6 +1058,13 @@ function App() {
       </aside>
 
       <section className="viewer" aria-label="3D plan preview">
+        {isGenerating ? (
+          <div className="viewer-loading" role="status" aria-live="polite">
+            <span className="spinner" />
+            <strong>間取りを立体化しています</strong>
+            <span>画像から部屋・庭・窓を読み取っています</span>
+          </div>
+        ) : null}
         <Canvas
           shadows
           dpr={[1, 2]}
