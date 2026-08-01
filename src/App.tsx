@@ -578,7 +578,7 @@ function OutdoorAreaMesh({
   shape.closePath()
 
   return (
-    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.025, 0]}>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, 0]}>
       <shapeGeometry args={[shape]} />
       <meshStandardMaterial color="#ffffff" map={texture ?? undefined} roughness={0.86} />
     </mesh>
@@ -607,7 +607,7 @@ function SpaceMesh({
   shape.closePath()
 
   return (
-    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
       <shapeGeometry args={[shape]} />
       <meshStandardMaterial color="#ffffff" map={texture ?? undefined} roughness={0.78} />
     </mesh>
@@ -853,14 +853,13 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
         ))}
       </group>
       <ContactShadows
-        position={[0, 0.015, 0]}
+        position={[0, -0.055, 0]}
         opacity={0.32}
         scale={18}
         blur={2.6}
         far={4.2}
         resolution={512}
       />
-      <gridHelper args={[16, 16, '#c5ccc5', '#edf0ea']} position={[0, -0.01, 0]} />
       <CameraViewpoint viewpoint={viewpoint} />
       <OrbitControls makeDefault target={viewpoint.target} maxPolarAngle={Math.PI * 0.48} />
     </>
