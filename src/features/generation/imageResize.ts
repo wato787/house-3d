@@ -1,7 +1,7 @@
 const maxImageSide = 1800
 const resizedImageQuality = 0.86
 
-async function resizeImageForUpload(file: File) {
+export async function resizeImageForUpload(file: File) {
   const image = await createImageBitmap(file)
   const scale = Math.min(1, maxImageSide / Math.max(image.width, image.height))
 
@@ -47,23 +47,4 @@ async function resizeImageForUpload(file: File) {
   return new File([blob], `${fileName}.jpg`, {
     type: 'image/jpeg',
   })
-}
-
-export async function generatePlanFromImage(file: File) {
-  const resizedFile = await resizeImageForUpload(file)
-  const formData = new FormData()
-  formData.append('image', resizedFile)
-
-  const response = await fetch('/api/generate-plan', {
-    method: 'POST',
-    body: formData,
-  })
-
-  const text = await response.text()
-
-  if (!response.ok) {
-    throw new Error(text || '3Dプレビューの作成に失敗しました。')
-  }
-
-  return text
 }
