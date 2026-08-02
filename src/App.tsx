@@ -57,6 +57,8 @@ type Viewpoint = {
   position: THREE.Vector3
 }
 
+type ViewMode = '3d' | '2d'
+
 const samplePlan: HousePlan = {
   scale: 1000,
   spaces: [
@@ -1224,11 +1226,112 @@ function PlanScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoint 
   )
 }
 
+function pointsToSvgPolygon(points: Point[]) {
+  return points.map(([x, y]) => `${x},${y}`).join(' ')
+}
+
+function getFixtureColor(fixture: Fixture) {
+  if (/sofa/i.test(fixture.kind)) {
+    return '#c7c0b6'
+  }
+  if (/tv|television/i.test(fixture.kind)) {
+    return '#2f3334'
+  }
+  if (/dining|table/i.test(fixture.kind)) {
+    return '#9f6b48'
+  }
+  if (/stairs/i.test(fixture.kind)) {
+    return '#c7a66b'
+  }
+  return fixture.color || '#7d858a'
+}
+
+function Plan2DView({ plan }: { plan: HousePlan }) {
+  const bounds = getPlanBounds(plan)
+  const walls = useMemo(() => getSpaceWalls(plan.spaces), [plan.spaces])
+  const openings = useMemo(() => plan.openings ?? [], [plan.openings])
+  const openingsByWall = useMemo(
+    () => getOpeningsByWall(walls, openings, getRenderScale(plan)),
+    [plan, walls, openings],
+  )
+
+  if (!bounds) {
+    return null
+  }
+
+  const padding = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) * 0.08
+  const viewBox = [
+    bounds.minX - padding,
+    bounds.minY - padding,
+    bounds.maxX - bounds.minX + padding * 2,
+    bounds.maxY - bounds.minY + padding * 2,
+  ].join(' ')
+
+  return (
+    <div className="plan-2d">
+      <svg viewBox={viewBox} role="img" aria-label="2D plan preview">
+        {(plan.outdoorAreas ?? []).map((area) => (
+          <polygon
+            key={area.id}
+            className={`plan-2d-outdoor plan-2d-outdoor-${area.kind}`}
+            points={pointsToSvgPolygon(area.polygon)}
+          />
+        ))}
+        {plan.spaces.map((space) => (
+          <polygon
+            key={space.id}
+            className="plan-2d-space"
+            fill={space.color}
+            points={pointsToSvgPolygon(space.polygon)}
+          />
+        ))}
+        {plan.spaces.map((space) => (
+          <polygon
+            key={`${space.id}-outline`}
+            className="plan-2d-wall"
+            points={pointsToSvgPolygon(space.polygon)}
+          />
+        ))}
+        {walls.flatMap((wall) =>
+          (openingsByWall.get(wall.id) ?? []).map((opening) => {
+            const width = Math.max(opening.width, plan.scale * 0.45)
+            const isWindow = opening.kind === 'window'
+            const angle = Math.atan2(wall.end[1] - wall.start[1], wall.end[0] - wall.start[0]) * (180 / Math.PI)
+
+            return (
+              <g
+                key={opening.id}
+                className={isWindow ? 'plan-2d-window' : 'plan-2d-door'}
+                transform={`translate(${opening.position[0]} ${opening.position[1]}) rotate(${angle})`}
+              >
+                <line x1={-width / 2} x2={width / 2} y1="0" y2="0" />
+              </g>
+            )
+          }),
+        )}
+        {(plan.fixtures ?? []).map((fixture) => (
+          <rect
+            key={fixture.id}
+            className="plan-2d-fixture"
+            fill={getFixtureColor(fixture)}
+            width={fixture.size[0]}
+            height={fixture.size[1]}
+            x={fixture.position[0] - fixture.size[0] / 2}
+            y={fixture.position[1] - fixture.size[1] / 2}
+            transform={`rotate(${fixture.rotation} ${fixture.position[0]} ${fixture.position[1]})`}
+          />
+        ))}
+      </svg>
+    </div>
+  )
+}
+
 function App() {
   const [jsonText, setJsonText] = useState(() => JSON.stringify(samplePlan, null, 2))
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [hasPreview, setHasPreview] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('3d')
   const [generationError, setGenerationError] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<{
     file: File
@@ -1312,6 +1415,7 @@ function App() {
       setJsonText(JSON.stringify(normalizePlan(parsedJson), null, 2))
       setIsDetailsOpen(false)
       setHasPreview(true)
+      setViewMode('3d')
     } catch (error) {
       setGenerationError(
         error instanceof Error ? error.message : '3Dプレビューの作成に失敗しました。',
@@ -1332,6 +1436,7 @@ function App() {
   function resetPreview() {
     setHasPreview(false)
     setIsDetailsOpen(false)
+    setViewMode('3d')
     setGenerationError(null)
     setImagePreview((currentPreview) => {
       if (currentPreview) {
@@ -1411,6 +1516,22 @@ function App() {
       {hasPreview ? (
         <section className="viewer" aria-label="3D plan preview">
           <div className="viewer-toolbar">
+            <div className="view-mode-toggle" role="group" aria-label="表示モード">
+              <button
+                type="button"
+                className={viewMode === '2d' ? 'view-mode-active' : ''}
+                onClick={() => setViewMode('2d')}
+              >
+                2D
+              </button>
+              <button
+                type="button"
+                className={viewMode === '3d' ? 'view-mode-active' : ''}
+                onClick={() => setViewMode('3d')}
+              >
+                3D
+              </button>
+            </div>
             <button type="button" onClick={openDrawer}>
               編集
             </button>
@@ -1422,18 +1543,22 @@ function App() {
             <span>画像から部屋・庭・窓を読み取っています</span>
           </div>
         ) : null}
-        <Canvas
-          shadows
-          dpr={[1, 2]}
-          gl={{ antialias: true, powerPreference: 'high-performance' }}
-          camera={{ position: [5.5, 3.2, 7], fov: 52 }}
-          onCreated={({ gl }) => {
-            gl.toneMapping = THREE.ACESFilmicToneMapping
-            gl.toneMappingExposure = 1.08
-          }}
-        >
-          <PlanScene plan={activePlan} viewpoint={selectedViewpoint} />
-        </Canvas>
+        {viewMode === '3d' ? (
+          <Canvas
+            shadows
+            dpr={[1, 2]}
+            gl={{ antialias: true, powerPreference: 'high-performance' }}
+            camera={{ position: [5.5, 3.2, 7], fov: 52 }}
+            onCreated={({ gl }) => {
+              gl.toneMapping = THREE.ACESFilmicToneMapping
+              gl.toneMappingExposure = 1.08
+            }}
+          >
+            <PlanScene plan={activePlan} viewpoint={selectedViewpoint} />
+          </Canvas>
+        ) : (
+          <Plan2DView plan={activePlan} />
+        )}
       </section>
       ) : null}
 
