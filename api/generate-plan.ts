@@ -1,5 +1,6 @@
 export const config = {
   runtime: 'edge',
+  maxDuration: 60,
 }
 
 declare const process: {
