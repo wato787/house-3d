@@ -2,6 +2,12 @@ export const config = {
   runtime: 'edge',
 }
 
+declare const process: {
+  env: {
+    GEMINI_API_KEY?: string
+  }
+}
+
 const geminiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models'
 const geminiModel = 'gemini-3.6-flash'
 
