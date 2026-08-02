@@ -22,6 +22,10 @@ export type Viewpoint = {
 const wallHeight = 1.2
 const wallThickness = 0.12
 const subtleTextureSize = 256
+const outdoorFloorRotation: [number, number, number] = [-Math.PI / 2, 0, 0]
+const outdoorFloorPosition: [number, number, number] = [0, -0.02, 0]
+const indoorFloorRotation: [number, number, number] = [-Math.PI / 2, 0, 0]
+const indoorFloorPosition: [number, number, number] = [0, 0.004, 0]
 
 function createPatternTexture(kind: 'wood' | 'tile' | 'concrete' | 'grass' | 'plaster') {
   const canvas = document.createElement('canvas')
@@ -133,6 +137,24 @@ function getOutdoorTextureKind(kind: OutdoorArea['kind']) {
   return 'concrete'
 }
 
+function useShapeFromPolygon(polygon: Point[], scale: number, center: THREE.Vector2) {
+  return useMemo(() => {
+    const shape = new THREE.Shape()
+
+    polygon.forEach((point, index) => {
+      const scenePoint = toScenePoint(point, scale, center)
+      if (index === 0) {
+        shape.moveTo(scenePoint.x, -scenePoint.z)
+      } else {
+        shape.lineTo(scenePoint.x, -scenePoint.z)
+      }
+    })
+    shape.closePath()
+
+    return shape
+  }, [center, polygon, scale])
+}
+
 function OutdoorAreaMesh({
   area,
   scale,
@@ -143,20 +165,12 @@ function OutdoorAreaMesh({
   center: THREE.Vector2
 }) {
   const texture = useMemo(() => createPatternTexture(getOutdoorTextureKind(area.kind)), [area])
-  const shape = new THREE.Shape()
-  area.polygon.forEach((point, index) => {
-    const scenePoint = toScenePoint(point, scale, center)
-    if (index === 0) {
-      shape.moveTo(scenePoint.x, -scenePoint.z)
-    } else {
-      shape.lineTo(scenePoint.x, -scenePoint.z)
-    }
-  })
-  shape.closePath()
+  const shape = useShapeFromPolygon(area.polygon, scale, center)
+  const shapeArgs = useMemo(() => [shape] as [THREE.Shape], [shape])
 
   return (
-    <mesh receiveShadow renderOrder={-20} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
-      <shapeGeometry args={[shape]} />
+    <mesh receiveShadow renderOrder={-20} rotation={outdoorFloorRotation} position={outdoorFloorPosition}>
+      <shapeGeometry args={shapeArgs} />
       <meshStandardMaterial
         color="#ffffff"
         depthWrite={false}
@@ -177,20 +191,12 @@ function SpaceMesh({
   center: THREE.Vector2
 }) {
   const texture = useMemo(() => createPatternTexture(getFloorKind(space)), [space])
-  const shape = new THREE.Shape()
-  space.polygon.forEach((point, index) => {
-    const scenePoint = toScenePoint(point, scale, center)
-    if (index === 0) {
-      shape.moveTo(scenePoint.x, -scenePoint.z)
-    } else {
-      shape.lineTo(scenePoint.x, -scenePoint.z)
-    }
-  })
-  shape.closePath()
+  const shape = useShapeFromPolygon(space.polygon, scale, center)
+  const shapeArgs = useMemo(() => [shape] as [THREE.Shape], [shape])
 
   return (
-    <mesh receiveShadow renderOrder={-10} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]}>
-      <shapeGeometry args={[shape]} />
+    <mesh receiveShadow renderOrder={-10} rotation={indoorFloorRotation} position={indoorFloorPosition}>
+      <shapeGeometry args={shapeArgs} />
       <meshStandardMaterial
         color="#ffffff"
         depthWrite={false}
@@ -531,19 +537,27 @@ function Plan3DScene({ plan, viewpoint }: { plan: HousePlan; viewpoint: Viewpoin
             openings={openingsByWall.get(wall.id) ?? []}
           />
         ))}
-        {generatedWalls.flatMap((wall) =>
-          (openingsByWall.get(wall.id) ?? [])
-            .filter((opening) => opening.kind === 'window')
-            .map((opening) => (
+        {generatedWalls.flatMap((wall) => {
+          const windowMeshes = []
+
+          for (const opening of openingsByWall.get(wall.id) ?? []) {
+            if (opening.kind !== 'window') {
+              continue
+            }
+
+            windowMeshes.push(
               <WindowMesh
                 key={opening.id}
                 opening={opening}
                 wall={wall}
                 scale={renderScale}
                 center={center}
-              />
-            )),
-        )}
+              />,
+            )
+          }
+
+          return windowMeshes
+        })}
         {(plan.fixtures ?? []).map((fixture) => (
           <FixtureMesh key={fixture.id} fixture={fixture} scale={renderScale} center={center} />
         ))}

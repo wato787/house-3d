@@ -60,9 +60,9 @@ export async function generatePlanJson(apiKey: string, image: File) {
     }),
   })
 
-  const payload = (await response.json()) as GeminiResponse
-
   if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as GeminiResponse
+
     return {
       ok: false as const,
       status: response.status,
@@ -70,6 +70,7 @@ export async function generatePlanJson(apiKey: string, image: File) {
     }
   }
 
+  const payload = (await response.json()) as GeminiResponse
   const text = payload.candidates?.[0]?.content?.parts
     ?.map((part) => part.text ?? '')
     .join('')

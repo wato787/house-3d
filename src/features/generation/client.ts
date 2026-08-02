@@ -10,11 +10,10 @@ export async function generatePlanFromImage(file: File) {
     body: formData,
   })
 
-  const text = await response.text()
-
   if (!response.ok) {
+    const text = await response.text()
     throw new Error(text || '3Dプレビューの作成に失敗しました。')
   }
 
-  return text
+  return response.text()
 }

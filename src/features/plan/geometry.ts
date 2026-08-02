@@ -146,38 +146,47 @@ function normalizeOpenings(plan: HousePlan) {
     }
 
     const accepted: Opening[] = []
+    const matches: Array<{
+      opening: Opening
+      projection: NonNullable<ReturnType<typeof getOpeningProjection>>
+    }> = []
 
-    openings
-      .map((opening) => ({
-        opening,
-        projection: getOpeningProjection(wall, opening, scale),
-      }))
-      .filter((match): match is { opening: Opening; projection: NonNullable<ReturnType<typeof getOpeningProjection>> } =>
-        Boolean(match.projection),
-      )
-      .filter(({ projection }) => {
-        const wallLength = distanceBetweenPoints(wall.start, wall.end) / scale
-        const halfWidth = projection.width / 2
+    for (const opening of openings) {
+      const projection = getOpeningProjection(wall, opening, scale)
+
+      if (!projection) {
+        continue
+      }
+
+      const wallLength = distanceBetweenPoints(wall.start, wall.end) / scale
+      const halfWidth = projection.width / 2
+
+      if (
+        projection.center - halfWidth < minimumOpeningCornerMarginMeters ||
+        wallLength - (projection.center + halfWidth) < minimumOpeningCornerMarginMeters
+      ) {
+        continue
+      }
+
+      matches.push({ opening, projection })
+    }
+
+    matches.sort((a, b) => a.projection.center - b.projection.center)
+
+    for (const { opening, projection } of matches) {
+      const hasNearbyOpening = accepted.some((acceptedOpening) => {
+        const acceptedProjection = getOpeningProjection(wall, acceptedOpening, scale)
         return (
-          projection.center - halfWidth >= minimumOpeningCornerMarginMeters &&
-          wallLength - (projection.center + halfWidth) >= minimumOpeningCornerMarginMeters
+          acceptedProjection &&
+          acceptedOpening.kind === opening.kind &&
+          Math.abs(acceptedProjection.center - projection.center) < 0.35
         )
       })
-      .sort((a, b) => a.projection.center - b.projection.center)
-      .forEach(({ opening, projection }) => {
-        const hasNearbyOpening = accepted.some((acceptedOpening) => {
-          const acceptedProjection = getOpeningProjection(wall, acceptedOpening, scale)
-          return (
-            acceptedProjection &&
-            acceptedOpening.kind === opening.kind &&
-            Math.abs(acceptedProjection.center - projection.center) < 0.35
-          )
-        })
 
-        if (!hasNearbyOpening) {
-          accepted.push(opening)
-        }
-      })
+      if (!hasNearbyOpening) {
+        accepted.push(opening)
+      }
+    }
 
     return accepted
   })
@@ -191,14 +200,16 @@ export function normalizePlan(plan: HousePlan): HousePlan {
   return {
     ...plan,
     spaces,
-    outdoorAreas: (plan.outdoorAreas ?? []).filter(
-      (area) => !doesOutdoorAreaOverlapSpaces(area, spaces),
-    ),
+    outdoorAreas: (plan.outdoorAreas ?? []).filter((area) => !doesOutdoorAreaOverlapSpaces(area, spaces)),
     walls: plan.walls ?? [],
     openings: normalizeOpenings(normalizedBasePlan),
-    fixtures: (plan.fixtures ?? [])
-      .filter((fixture) => isFixtureAllowedInPlan(fixture, spaces))
-      .map((fixture) => clampFixtureToRoom(fixture, spaces, initialScale)),
+    fixtures: (plan.fixtures ?? []).reduce<Fixture[]>((normalizedFixtures, fixture) => {
+      if (isFixtureAllowedInPlan(fixture, spaces)) {
+        normalizedFixtures.push(clampFixtureToRoom(fixture, spaces, initialScale))
+      }
+
+      return normalizedFixtures
+    }, []),
   }
 }
 
