@@ -597,20 +597,8 @@ function pointsToSvgPolygon(points: Point[]) {
   return points.map(([x, y]) => `${x},${y}`).join(' ')
 }
 
-function getFixtureColor(fixture: Fixture) {
-  if (/sofa/i.test(fixture.kind)) {
-    return '#c7c0b6'
-  }
-  if (/tv|television/i.test(fixture.kind)) {
-    return '#2f3334'
-  }
-  if (/dining|table/i.test(fixture.kind)) {
-    return '#9f6b48'
-  }
-  if (/stairs/i.test(fixture.kind)) {
-    return '#c7a66b'
-  }
-  return fixture.color || '#7d858a'
+function getPlanLineWidth(plan: HousePlan, meters: number, minimum: number) {
+  return Math.max(plan.scale * meters, minimum)
 }
 
 export function Plan2DView({ plan }: { plan: HousePlan }) {
@@ -633,6 +621,8 @@ export function Plan2DView({ plan }: { plan: HousePlan }) {
     bounds.maxX - bounds.minX + padding * 2,
     bounds.maxY - bounds.minY + padding * 2,
   ].join(' ')
+  const wallWidth = getPlanLineWidth(plan, 0.11, 8)
+  const openingWidth = getPlanLineWidth(plan, 0.075, 6)
 
   return (
     <div className="plan-2d">
@@ -652,11 +642,15 @@ export function Plan2DView({ plan }: { plan: HousePlan }) {
             points={pointsToSvgPolygon(space.polygon)}
           />
         ))}
-        {plan.spaces.map((space) => (
-          <polygon
-            key={`${space.id}-outline`}
+        {walls.map((wall) => (
+          <line
+            key={wall.id}
             className="plan-2d-wall"
-            points={pointsToSvgPolygon(space.polygon)}
+            strokeWidth={wallWidth}
+            x1={wall.start[0]}
+            x2={wall.end[0]}
+            y1={wall.start[1]}
+            y2={wall.end[1]}
           />
         ))}
         {walls.flatMap((wall) =>
@@ -671,7 +665,7 @@ export function Plan2DView({ plan }: { plan: HousePlan }) {
                 className={isWindow ? 'plan-2d-window' : 'plan-2d-door'}
                 transform={`translate(${opening.position[0]} ${opening.position[1]}) rotate(${angle})`}
               >
-                <line x1={-width / 2} x2={width / 2} y1="0" y2="0" />
+                <line strokeWidth={openingWidth} x1={-width / 2} x2={width / 2} y1="0" y2="0" />
               </g>
             )
           }),
@@ -680,7 +674,7 @@ export function Plan2DView({ plan }: { plan: HousePlan }) {
           <rect
             key={fixture.id}
             className="plan-2d-fixture"
-            fill={getFixtureColor(fixture)}
+            fill="none"
             width={fixture.size[0]}
             height={fixture.size[1]}
             x={fixture.position[0] - fixture.size[0] / 2}
